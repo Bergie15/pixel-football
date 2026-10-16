@@ -64,7 +64,11 @@ const UI = (() => {
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
     W = Math.max(240, Math.round(VIEW_H * w / h));
-    cv.width = W; cv.height = VIEW_H;
+    // Draw the art RQ times larger than its pixels so things can move by a
+    // fraction of an art pixel; that's what makes motion glide.
+    RQ = clamp(Math.ceil(h * (window.devicePixelRatio || 1) / VIEW_H), 1, 4);
+    cv.width = W * RQ; cv.height = VIEW_H * RQ;
+    ctx.setTransform(RQ, 0, 0, RQ, 0, 0);
     ctx.imageSmoothingEnabled = false;
     $('rotate').hidden = !(match && h > w * 1.05);
   }
@@ -296,12 +300,13 @@ const UI = (() => {
   // ---- main loop ---------------------------------------------------------------
   function drawStrip(strip, camX) {
     const cam = clamp(camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
-    ctx.drawImage(strip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
+    ctx.drawImage(strip, (cam - FIELD_XMIN) * SX - W / 2, 0, W, VIEW_H, 0, 0, W, VIEW_H);
     return cam;
   }
   function drawLooseBall(camX, x, y, h, spin) {
     const cam = clamp(camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
-    const bx = Math.round((x - cam) * SX + W / 2), gy = Math.round(FIELD_TOP + y * SY), by = gy - Math.round(h * POST_H);
+    const q = v => Math.round(v * RQ) / RQ;
+    const bx = q((x - cam) * SX + W / 2), gy = q(FIELD_TOP + y * SY), by = gy - q(h * POST_H);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx - 1, gy, 3, 1);
     ctx.fillStyle = '#7a3b12';
     if (Math.floor(spin) & 1) ctx.fillRect(bx - 1, by - 1, 2, 3); else ctx.fillRect(bx - 1, by - 1, 3, 2);
@@ -365,7 +370,7 @@ const UI = (() => {
         const bx = lerp(dv.from, dv.to, e);
         match.camX += (bx - 8 - match.camX) * Math.min(1, dt * 4);
         const cam = drawStrip(match.strip, match.camX);
-        const sx = x => Math.round((x - cam) * SX + W / 2), top = FIELD_TOP, bot = FIELD_TOP + Math.round(FIELD_W * SY);
+        const sx = x => Math.round(((x - cam) * SX + W / 2) * RQ) / RQ, top = FIELD_TOP, bot = FIELD_TOP + FIELD_W * SY;
         ctx.fillStyle = 'rgba(255,90,74,0.25)';
         ctx.fillRect(Math.min(sx(dv.from), sx(bx)), top, Math.abs(sx(dv.from) - sx(bx)), bot - top);
         ctx.fillStyle = 'rgba(70,140,255,0.9)'; ctx.fillRect(sx(dv.from), top, 1, bot - top);
@@ -382,8 +387,7 @@ const UI = (() => {
       }
       attract.cam += dt * 3;
       if (attract.cam > 100) attract.cam = 0;
-      const cam = clamp(attract.cam, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
-      ctx.drawImage(attract.strip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
+      drawStrip(attract.strip, attract.cam);
     }
     drawConfetti(dt);
     requestAnimationFrame(frame);

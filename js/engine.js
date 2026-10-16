@@ -12,6 +12,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 const BASE_SPEED = { QB: 6.7, RB: 7.8, WR: 8.0, TE: 7.1, OL: 5.4, DL: 6.4, LB: 7.1, CB: 7.8, S: 7.6 };
 const TACKLE_R = 1.0;
+let RQ = 1;  // render sub-pixel quantum, set by the UI to its canvas scale
 
 class Play {
   // opts: { def: playbook entry, los, ballY, roster, units:{ol}, oppDef, offKit, defKit, goalLine }
@@ -603,11 +604,14 @@ class Play {
   }
 
   // ---- draw ------------------------------------------------------------------
+  // Positions are snapped to 1/RQ of an art pixel (the canvas is drawn RQ times
+  // larger than the art), so movement glides instead of stepping a whole pixel.
   draw(ctx, W, fieldStrip, fd) {
     const cam = clamp(this.camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
-    const sx = x => Math.round((x - cam) * SX + W / 2);
-    const sy = y => Math.round(FIELD_TOP + y * SY);
-    ctx.drawImage(fieldStrip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
+    const q = v => Math.round(v * RQ) / RQ;
+    const sx = x => q((x - cam) * SX + W / 2);
+    const sy = y => q(FIELD_TOP + y * SY);
+    ctx.drawImage(fieldStrip, (cam - FIELD_XMIN) * SX - W / 2, 0, W, VIEW_H, 0, 0, W, VIEW_H);
 
     // line of scrimmage + line to gain
     const top = FIELD_TOP, bot = sy(FIELD_W);
@@ -618,28 +622,34 @@ class Play {
     if (!this.noLines) { ctx.fillStyle = '#ff7a1a'; ctx.fillRect(sx(this.los) - 1, bot + 3, 3, 5); }
     if (fd && fd < 100) { ctx.fillStyle = '#ffd23c'; ctx.fillRect(sx(fd) - 1, bot + 3, 3, 5); }
 
+    // the called routes, shown before the snap and fading just after it
+    const routeAlpha = this.phase === 'presnap' ? 1 : (this.phase === 'pocket' ? clamp(1 - this.t / 0.9, 0, 1) : 0);
+    if (routeAlpha > 0 && !this.kickoff) this.drawRoutes(ctx, sx, sy, routeAlpha);
+
     // aim guide
-    if (this.aim && this.canThrow()) this.drawAim(ctx, sx, sy);
+    let target = null;
+    if (this.aim && this.canThrow()) target = this.drawAim(ctx, sx, sy);
 
     // players sorted by depth
     const list = this.ents.slice().sort((a, b) => a.y - b.y);
     for (const e of list) {
       const px = sx(e.x), py = sy(e.y);
-      if (px < -10 || px > W + 10) continue;
+      if (px < -12 || px > W + 12) continue;
+      if (e === target) this.ring(ctx, px, py, '#ffffff');
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.fillRect(px - 3, py, 7, 2);
+      ctx.fillRect(px - 4, py, 9, 2);
       const kit = e.side === 'off' ? this.offKit : this.defKit;
       const sp = Math.hypot(e.vx, e.vy);
       let facing = e.side === 'off' ? 1 : -1;
       if (e.vx < -0.8) facing = -1; else if (e.vx > 0.8) facing = 1;
-      const pose = sp < 0.6 ? 'stand' : (Math.floor(e.anim * 1.3) & 1 ? 'runA' : 'runB');
+      const pose = sp < 0.6 ? 'stand' : (Math.floor(e.anim * 1.4) & 1 ? 'runA' : 'runB');
       const spr = getSprite(kit, e.skin, pose, facing);
       if (e.down && this.phase === 'dead') {
-        blitRot(ctx, spr, px, py - 2, facing > 0 ? 1 : 3);
+        blitRot(ctx, spr, px, py - 3, facing > 0 ? 1 : 3);
       } else {
         const flash = e === this.carrier && this.t < (e.jukeUntil || 0);
         ctx.globalAlpha = flash ? 0.6 : 1;
-        ctx.drawImage(spr, px - 4, py - 12);
+        ctx.drawImage(spr, px - SPR_W / 2, py - SPR_H + 1);
         ctx.globalAlpha = 1;
       }
       // openness dot for receivers while the QB has the ball
@@ -647,11 +657,12 @@ class Play {
         let sep = 99;
         for (const d of this.def) sep = Math.min(sep, dist(d, e));
         ctx.fillStyle = sep > 3 ? '#38e06a' : sep > 1.6 ? '#ffd23c' : '#ff4a3d';
-        ctx.fillRect(px - 1, py - 16, 3, 2);
+        ctx.fillRect(px - 1, py - SPR_H - 3, 3, 2);
       }
       if (e === this.carrier && this.phase === 'run') {
         ctx.fillStyle = '#ffe14a';
-        ctx.fillRect(px - 2, py - 17, 5, 1); ctx.fillRect(px - 1, py - 16, 3, 1); ctx.fillRect(px, py - 15, 1, 1);
+        const ty = py - SPR_H - 4;
+        ctx.fillRect(px - 2, ty, 5, 1); ctx.fillRect(px - 1, ty + 1, 3, 1); ctx.fillRect(px, ty + 2, 1, 1);
       }
     }
 
@@ -659,16 +670,53 @@ class Play {
     const b = this.ball;
     if (b) {
       let bx = sx(b.x), by = sy(b.y);
-      if (b.holder) { bx += (b.holder.vx < -0.8 ? -2 : 2); by -= 6; }
+      if (b.holder) { bx += (b.holder.vx < -0.8 ? -3 : 3); by -= 8; }
       else {
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx - 1, by, 3, 1);
-        by -= Math.round(b.h * 3.2);
+        by -= q(b.h * POST_H);
       }
       if (!(b.holder && b.holder.down && this.phase === 'dead')) {
-        ctx.fillStyle = '#7a3b12'; ctx.fillRect(bx - 1, by - 1, 3, 2);
-        ctx.fillStyle = '#f2e6d0'; ctx.fillRect(bx, by - 1, 1, 1);
+        ctx.fillStyle = '#7a3b12'; ctx.fillRect(bx - 1.5, by - 1, 3, 2);
+        ctx.fillStyle = '#f2e6d0'; ctx.fillRect(bx - 0.5, by - 1, 1, 0.5);
       }
     }
+  }
+
+  // Pixel ellipse under a player
+  ring(ctx, px, py, color) {
+    ctx.fillStyle = color;
+    for (let i = 0; i < 28; i++) {
+      const a = i / 28 * Math.PI * 2;
+      ctx.fillRect(Math.round(px + Math.cos(a) * 6), Math.round(py + 0.5 + Math.sin(a) * 2.5), 1, 1);
+    }
+  }
+
+  drawRoutes(ctx, sx, sy, alpha) {
+    const colors = ['#5ee07a', '#5fb4ff', '#f4f4f4', '#ffd23c', '#ff8a4a'];
+    ctx.globalAlpha = alpha;
+    this.receivers.forEach((r, i) => {
+      let pts;
+      if (r.route) {
+        pts = [{ x: r.x, y: r.y }].concat(r.route);
+        if (!r.routeStop) {
+          const a = pts[pts.length - 2], p = pts[pts.length - 1], m = Math.hypot(p.x - a.x, p.y - a.y) || 1;
+          const ext = Math.min(8, Math.max(0, 30 - (p.x - r.x)));
+          if (ext > 0) pts.push({ x: p.x + (p.x - a.x) / m * ext, y: clamp(p.y + (p.y - a.y) / m * ext, 1, FIELD_W - 1) });
+        }
+        // trim long go routes so the picture stays readable
+        pts = pts.map(p => ({ x: Math.min(p.x, r.x + 30), y: p.y }));
+      } else if (r.path) pts = [{ x: r.x, y: r.y }].concat(r.path);
+      else return;
+      ctx.fillStyle = colors[i % colors.length];
+      for (let k = 1; k < pts.length; k++) {
+        const x0 = sx(pts[k - 1].x), y0 = sy(pts[k - 1].y), x1 = sx(pts[k].x), y1 = sy(pts[k].y);
+        const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+        for (let s = 0; s <= n; s++) ctx.fillRect(Math.round(lerp(x0, x1, s / n)), Math.round(lerp(y0, y1, s / n)) - 1, 1, 1);
+      }
+      const end = pts[pts.length - 1];
+      ctx.fillRect(Math.round(sx(end.x)) - 1, Math.round(sy(end.y)) - 2, 3, 3);
+    });
+    ctx.globalAlpha = 1;
   }
 
   drawAim(ctx, sx, sy) {
@@ -678,16 +726,24 @@ class Play {
     const k = d > maxD ? maxD / d : 1;
     const tx = q.x + (a.x - q.x) * k, ty = q.y + (a.y - q.y) * k;
     const peak = 0.8 + Math.min(d, maxD) * 0.13;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    for (let i = 1; i < 18; i++) {
-      const u = i / 18;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (let i = 1; i < 20; i++) {
+      const u = i / 20;
       const x = lerp(q.x, tx, u), y = lerp(q.y, ty, u), h = 1.8 * (1 - u) + 4 * peak * u * (1 - u);
-      ctx.fillRect(sx(x), sy(y) - Math.round(h * 3.2), 1, 1);
+      ctx.fillRect(sx(x) - 0.5, sy(y) - h * POST_H - 0.5, 1, 1);
     }
+    // landing spot
     const cx = sx(tx), cy = sy(ty);
-    ctx.fillStyle = '#ffe14a';
-    ctx.fillRect(cx - 4, cy, 3, 1); ctx.fillRect(cx + 2, cy, 3, 1);
-    ctx.fillRect(cx, cy - 3, 1, 2); ctx.fillRect(cx, cy + 2, 1, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillRect(cx - 2, cy - 1, 4, 2); ctx.fillRect(cx - 1, cy - 1.5, 2, 3);
+    // highlight the receiver the throw is headed for
+    let best = null, bd = 5;
+    for (const r of this.receivers) {
+      if (r.block) continue;
+      const dd = Math.hypot(r.x - tx, r.y - ty);
+      if (dd < bd) { bd = dd; best = r; }
+    }
+    return best;
   }
 }
 
