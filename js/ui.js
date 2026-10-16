@@ -8,7 +8,7 @@ const UI = (() => {
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   let cv, ctx, W = 500;
-  const settings = Object.assign({ sound: true, aim: 'pull', qlen: 300 }, load(SETTINGS_KEY) || {});
+  const settings = Object.assign({ sound: true, aim: 'pull', qlen: 300, diff: 'normal' }, load(SETTINGS_KEY) || {});
   let league = load(SAVE_KEY);
   if (league && (league.v !== 1 || !TEAM_BY_ID[league.userId])) league = null;
   let match = null, matchCtx = null, paused = false;
@@ -280,30 +280,87 @@ const UI = (() => {
   }
 
   // ---- main loop ---------------------------------------------------------------
+  function drawStrip(strip, camX) {
+    const cam = clamp(camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
+    ctx.drawImage(strip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
+    return cam;
+  }
+  function drawLooseBall(camX, x, y, h, spin) {
+    const cam = clamp(camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
+    const bx = Math.round((x - cam) * SX + W / 2), gy = Math.round(FIELD_TOP + y * SY), by = gy - Math.round(h * POST_H);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx - 1, gy, 3, 1);
+    ctx.fillStyle = '#7a3b12';
+    if (Math.floor(spin) & 1) ctx.fillRect(bx - 1, by - 1, 2, 3); else ctx.fillRect(bx - 1, by - 1, 3, 2);
+    ctx.fillStyle = '#f2e6d0'; ctx.fillRect(bx, by - 1, 1, 1);
+  }
+
+  // Touchdown confetti in the scoring team's colors, in screen space
+  let confetti = [];
+  function confettiBurst(team) {
+    const cols = [team.c1, team.c2, '#ffd23c', '#f4f4f4'];
+    for (let i = 0; i < 140; i++) {
+      confetti.push({ x: Math.random() * W, y: -10 - Math.random() * 60, vx: (Math.random() - 0.5) * 30, vy: 30 + Math.random() * 50, c: cols[i % cols.length], life: 2.2 + Math.random() });
+    }
+  }
+  function drawConfetti(dt) {
+    if (!confetti.length) return;
+    for (const c of confetti) {
+      c.life -= dt; c.x += c.vx * dt; c.y += c.vy * dt; c.vx += (Math.random() - 0.5) * 60 * dt;
+      ctx.fillStyle = c.c; ctx.fillRect(Math.round(c.x), Math.round(c.y), 2, (c.life * 10 | 0) & 1 ? 2 : 1);
+    }
+    confetti = confetti.filter(c => c.life > 0 && c.y < VIEW_H);
+  }
+
+  function driveAnim(from, to, cb) {
+    if (!match) return cb();
+    match.driveAnim = { from, to, t: 0, dur: clamp(Math.abs(to - from) / 45, 0.8, 1.8), cb };
+  }
+
   let last = 0;
   function frame(ts) {
     const dt = Math.min(0.05, (ts - last) / 1000 || 0);
     last = ts;
     keyInput();
     if (match) {
-      const p = match.play;
-      if (p) {
+      const p = match.play, k = match.kickAnim, dv = match.driveAnim;
+      $('chip').hidden = !p || !!k;
+      $('btnScramble').hidden = !(p && !k && p.canThrow());
+      if (k) {
+        // kick in flight
+        k.t += dt;
+        const u = Math.min(1, k.t / k.dur);
+        const bx = lerp(k.fx, k.tx, u), by = lerp(k.fy, k.ty, u), h = 4 * k.peak * u * (1 - u) + 0.5 * (1 - u);
+        let cam;
+        if (p) { p.camX += (bx + 3 - p.camX) * Math.min(1, dt * 4); p.draw(ctx, W, match.strip, null); cam = p.camX; }
+        else { match.camX = bx; drawStrip(match.strip, bx); cam = bx; }
+        drawLooseBall(cam, bx, by, h, k.t * 14);
+        if (u >= 1) { match.kickAnim = null; k.cb(); }
+      } else if (p) {
         p.input = input;
         if (!paused) p.update(dt);
-        while (p.events.length) sfx(p.events.shift());
+        while (p.events.length) { const ev = p.events.shift(); sfx(ev); if (ev === 'td') confettiBurst(match.user); }
         if (p.phase === 'dead' && p.deadT > 0.9 && !p.reported) {
           p.reported = true;
           aiming = null; stick = null; input.active = false;
           match.onPlayEnd(p.result);
         }
-        $('btnScramble').hidden = !p.canThrow();
-        $('chip').hidden = false;
         p.draw(ctx, W, match.strip, match.mode === 'two' ? null : match.fd);
+      } else if (dv) {
+        // opponent drive: the ball marches toward the user's end zone
+        dv.t += dt;
+        const u = Math.min(1, dv.t / dv.dur), e = u * u * (3 - 2 * u);
+        const bx = lerp(dv.from, dv.to, e);
+        match.camX += (bx - 8 - match.camX) * Math.min(1, dt * 4);
+        const cam = drawStrip(match.strip, match.camX);
+        const sx = x => Math.round((x - cam) * SX + W / 2), top = FIELD_TOP, bot = FIELD_TOP + Math.round(FIELD_W * SY);
+        ctx.fillStyle = 'rgba(255,90,74,0.25)';
+        ctx.fillRect(Math.min(sx(dv.from), sx(bx)), top, Math.abs(sx(dv.from) - sx(bx)), bot - top);
+        ctx.fillStyle = 'rgba(70,140,255,0.9)'; ctx.fillRect(sx(dv.from), top, 1, bot - top);
+        ctx.fillStyle = '#ff5a4a'; ctx.fillRect(sx(bx), top, 1, bot - top);
+        drawLooseBall(cam, bx, FIELD_W / 2, 0.4 + Math.abs(Math.sin(dv.t * 9)) * 0.6, 0);
+        if (u >= 1 && !dv.done) { dv.done = true; setTimeout(() => { match && (match.driveAnim = null); dv.cb(); }, 250); }
       } else {
-        $('btnScramble').hidden = true;
-        $('chip').hidden = true;
-        const cam = clamp(match.camX, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
-        ctx.drawImage(match.strip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
+        drawStrip(match.strip, match.camX);
       }
     } else {
       if (!attract.strip) {
@@ -315,6 +372,7 @@ const UI = (() => {
       const cam = clamp(attract.cam, FIELD_XMIN + W / 2 / SX, FIELD_XMAX - W / 2 / SX);
       ctx.drawImage(attract.strip, Math.round((cam - FIELD_XMIN) * SX - W / 2), 0, W, VIEW_H, 0, 0, W, VIEW_H);
     }
+    drawConfetti(dt);
     requestAnimationFrame(frame);
   }
 
@@ -415,7 +473,7 @@ const UI = (() => {
           <div class="row"><button class="btn go" data-act="simWeek">${L.week < REG_WEEKS ? 'ADVANCE' : 'SIM ' + esc(weekLabel(L.week))}</button></div></div>`;
       }
     }
-    const tabs = ['schedule', 'standings', 'roster'];
+    const tabs = ['schedule', 'standings', 'roster', 'history'];
     show(`
       <header class="teamhead" style="--c1:${me.c1};--c2:${me.c2}">
         ${helmet(me.id)}
@@ -424,8 +482,9 @@ const UI = (() => {
         <div class="cp"><b>${L.cp}</b><span>COACH PTS</span></div>
       </header>
       ${next}
+      ${L.week === 0 ? recruitHTML() : ''}
       <div class="tabs">${tabs.map(t => `<button class="tab ${hubTab === t ? 'on' : ''}" data-act="tab" data-arg="${t}">${t.toUpperCase()}</button>`).join('')}</div>
-      <section class="tabbody">${hubTab === 'schedule' ? scheduleHTML() : hubTab === 'standings' ? standingsHTML() : rosterHTML()}</section>
+      <section class="tabbody">${hubTab === 'schedule' ? scheduleHTML() : hubTab === 'standings' ? standingsHTML() : hubTab === 'history' ? historyHTML() : rosterHTML()}</section>
       <div class="menu"><button class="btn" data-act="title">MAIN MENU</button></div>`);
   }
 
@@ -457,7 +516,8 @@ const UI = (() => {
     const L = league;
     const rows = POSITIONS.map(pos => {
       const p = L.roster[pos.key];
-      return `<div class="prow"><div class="pid"><b>${pos.label}</b> #${p.num} ${esc(p.name)} <span class="dim">${YEARS[p.year]}</span></div>
+      const sl = statLine(pos.key, p.ss);
+      return `<div class="prow"><div class="pid"><b>${pos.label}</b> #${p.num} ${esc(p.name)} <span class="dim">${YEARS[p.year]}</span>${sl ? `<div class="pstat">${esc(sl)}</div>` : ''}</div>
         <div class="pattrs">${pos.attrs.map(a => `<span class="attr">${ATTR_NAMES[a]} ${pips(p[a])}
         ${p[a] < 5 ? `<button class="plus" data-act="upgrade" data-arg="${pos.key}.${a}" ${L.cp < upgradeCost(p[a]) ? 'disabled' : ''}>+${upgradeCost(p[a])}</button>` : '<span class="max">MAX</span>'}</span>`).join('')}</div></div>`;
     }).join('');
@@ -465,6 +525,42 @@ const UI = (() => {
       <div class="pattrs"><span class="attr">${pips(L.units[k])}${L.units[k] < 5 ? `<button class="plus" data-act="upgrade" data-arg="unit.${k}" ${L.cp < L.units[k] + 1 ? 'disabled' : ''}>+${L.units[k] + 1}</button>` : '<span class="max">MAX</span>'}</span></div></div>`;
     return `<p class="fine">Spend coach points to develop players. Win games to earn more (3 per win, 1 per loss, 5 for a title game win).</p>
       ${rows}${unit('ol', 'O-LINE', 'pass protection + run blocking')}${unit('def', 'DEFENSE', 'how often opponents score')}`;
+  }
+
+  let offseasonReport = null;
+  function offseason(rep) {
+    offseasonReport = rep;
+    show(`<h2>OFFSEASON · SEASON ${league.season}</h2><div class="box help">
+        <h3>Graduated</h3><p>${rep.graduated.length ? rep.graduated.map(esc).join('<br>') : 'Nobody. A young team returns intact.'}</p>
+        <h3>Offseason gains</h3><p>${rep.improved.length ? rep.improved.map(esc).join('<br>') : 'None this year.'}</p>
+        <p class="dim">+2 coach points for the new season.</p></div>
+        ${recruitHTML()}
+        <div class="menu"><button class="btn go" data-act="toSeason">TO SEASON ${league.season}</button></div>`);
+  }
+
+  function recruitHTML() {
+    const L = league;
+    if (!L.recruits || !L.recruits.length) return '';
+    return `<h3>RECRUITING</h3><p class="fine">Pick one freshman for each open spot. A better record draws better recruits.</p>` +
+      L.recruits.map((r, i) => {
+        const pos = POSITIONS.find(p => p.key === r.pos);
+        return `<div class="prow recruit"><div class="pid"><b>${pos.label}</b> <span class="dim">replacing a senior</span></div>
+          <div class="ropts">${r.options.map((p, j) => `<button class="ropt ${(r.chosen || 0) === j ? 'on' : ''}" data-act="recruit" data-arg="${i}.${j}">
+            <span>${esc(p.name)}</span>${pos.attrs.map(a => `<span class="attr">${ATTR_NAMES[a]} ${pips(p[a])}</span>`).join('')}</button>`).join('')}</div></div>`;
+      }).join('');
+  }
+
+  function historyHTML() {
+    const L = league, H = L.history || [];
+    const titles = H.filter(h => h.won).length, confs = H.filter(h => h.conf).length;
+    const allTime = H.reduce((a, h) => ({ w: a.w + h.w, l: a.l + h.l }), { w: 0, l: 0 });
+    const leaders = POSITIONS.map(pos => { const p = L.roster[pos.key], s = statLine(pos.key, p.ss); return s ? `<tr><td>${pos.label}</td><td>${esc(p.name)}</td><td>${esc(s)}</td></tr>` : ''; }).join('');
+    return `<div class="box help trophies"><h3>TROPHY CASE</h3>
+        <p>${titles} Border Bowl title${titles === 1 ? '' : 's'} · ${confs} conference title${confs === 1 ? '' : 's'} · ${allTime.w}-${allTime.l} all-time</p></div>
+      <h3>SEASON ${L.season} STATS</h3>
+      ${leaders ? `<table class="tbl"><tbody>${leaders}</tbody></table>` : '<p class="fine">No games played yet this season.</p>'}
+      <h3>PAST SEASONS</h3>
+      ${H.length ? `<table class="tbl"><thead><tr><th>YEAR</th><th>RECORD</th><th>CHAMPION</th></tr></thead><tbody>${H.slice().reverse().map(h => `<tr><td>${h.season}</td><td>${h.w}-${h.l}${h.won ? ' <span class="tag">BORDER BOWL</span>' : h.conf ? ' <span class="tag">CONF CHAMP</span>' : ''}</td><td>${esc(TEAM_BY_ID[h.champ].name)}</td></tr>`).join('')}</tbody></table>` : '<p class="fine">Your first season is underway.</p>'}`;
   }
 
   function howto() {
@@ -488,6 +584,7 @@ const UI = (() => {
     show(`<h2>SETTINGS</h2>
       <div class="box help">
         <h3>Sound</h3><div class="opts">${opt('sound', true, 'ON')}${opt('sound', false, 'OFF')}</div>
+        <h3>Difficulty</h3><div class="opts">${opt('diff', 'easy', 'EASY')}${opt('diff', 'normal', 'NORMAL')}${opt('diff', 'hard', 'HARD')}</div>
         <h3>Aim style</h3><div class="opts">${opt('aim', 'pull', 'PULL BACK')}${opt('aim', 'touch', 'TOUCH TARGET')}</div>
         <h3>Quarter length</h3><div class="opts">${opt('qlen', 180, '3 MIN')}${opt('qlen', 300, '5 MIN')}${opt('qlen', 480, '8 MIN')}</div>
         ${league ? `<h3>Saved season</h3><div class="opts"><button class="opt danger" data-act="reset">${resetArmed ? 'TAP AGAIN TO DELETE' : 'DELETE SAVE'}</button></div>` : ''}
@@ -496,8 +593,27 @@ const UI = (() => {
   }
   let resetArmed = false;
 
+  // Best performer from one game's box score
+  function playerOfGame(m) {
+    const s = m.st, by = {};
+    const g = k => by[k] || (by[k] = {});
+    Object.assign(g('QB'), { comp: s.comp, att: s.att, pyds: s.pyds, ptd: s.ptd, int: s.int });
+    for (const [k, r] of Object.entries(s.rush)) Object.assign(g(k), { ratt: r.att, ryds: r.yds, rtd: r.td });
+    for (const [k, r] of Object.entries(s.rec)) Object.assign(g(k), { rec: r.rec, recyds: r.yds, rectd: r.td });
+    Object.assign(g('K'), { fg: s.fg, fga: s.fga });
+    let best = null, bv = 3;
+    for (const [k, o] of Object.entries(by)) {
+      const v = (o.pyds || 0) / 25 + (o.ptd || 0) * 4 - (o.int || 0) * 2 + ((o.ryds || 0) + (o.recyds || 0)) / 10 + ((o.rtd || 0) + (o.rectd || 0)) * 6 + (o.fg || 0) * 3;
+      if (v > bv) { bv = v; best = k; }
+    }
+    if (!best) return '';
+    const p = m.roster[best];
+    return `#${p.num} ${p.name} · ${statLine(best, by[best])}`;
+  }
+
   function postgame(m, info) {
     const s = m.st, won = m.score.u > m.score.o;
+    const potg = playerOfGame(m);
     const recs = Object.entries(s.rec).sort((a, b) => b[1].yds - a[1].yds).slice(0, 3)
       .map(([role, r]) => { const p = m.roster[role]; return `<tr><td>${esc(p.name)}</td><td>${r.rec} rec</td><td>${r.yds} yds</td><td>${r.td} TD</td></tr>`; }).join('');
     show(`<div class="box final ${won ? 'won' : 'lost'}">
@@ -508,6 +624,7 @@ const UI = (() => {
           <div>${helmet(m.opp.id)}<b>${m.score.o}</b><span>${esc(m.opp.mascot)}</span></div>
         </div>
         <div class="ptitle">${won ? 'VICTORY' : 'DEFEAT'}</div>
+        ${potg ? `<p class="potg"><span class="kicker">PLAYER OF THE GAME</span><br>${esc(potg)}</p>` : ''}
         ${info.extra ? `<p>${esc(info.extra)}</p>` : ''}
       </div>
       <h3>BOX SCORE</h3>
@@ -536,7 +653,7 @@ const UI = (() => {
     $('hud').hidden = false;
     paused = false;
     matchCtx = ctxInfo;
-    match = new Match(Object.assign({ qlen: settings.qlen, onFinish: m => endMatch(m) }, opts));
+    match = new Match(Object.assign({ qlen: settings.qlen, diff: settings.diff, onFinish: m => endMatch(m) }, opts));
     resize();
     match.start();
   }
@@ -551,6 +668,7 @@ const UI = (() => {
     const L = league, g = matchCtx.game;
     const home = g.h === L.userId;
     g.hs = home ? m.score.u : m.score.o; g.as = home ? m.score.o : m.score.u; g.done = true;
+    addGameStats(L, m.st);
     const earned = applyResult(L, g, won);
     const label = weekLabel(L.week);
     finishWeek(L);
@@ -568,6 +686,7 @@ const UI = (() => {
   // ---- actions ---------------------------------------------------------------------
   const actions = {
     title: () => title(),
+    toSeason: () => { offseasonReport = null; hubTab = 'schedule'; hub(); },
     hub: () => hub(),
     howto: () => howto(),
     settings: () => { resetArmed = false; settingsScreen(); },
@@ -619,12 +738,14 @@ const UI = (() => {
     nextSeason: () => {
       const rep = nextSeason(league);
       store(SAVE_KEY, league);
-      show(`<h2>OFFSEASON</h2><div class="box help">
-        <h3>Graduated</h3><p>${rep.graduated.length ? rep.graduated.map(esc).join('<br>') : 'Nobody — a young team returns intact.'}</p>
-        <h3>New recruits</h3><p>${rep.recruits.length ? rep.recruits.map(esc).join('<br>') : '—'}</p>
-        <h3>Offseason gains</h3><p>${rep.improved.length ? rep.improved.map(esc).join('<br>') : '—'}</p>
-        <p class="dim">+2 coach points for the new season.</p></div>
-        <div class="menu"><button class="btn go" data-act="hub">TO SEASON ${league.season}</button></div>`);
+      offseason(rep);
+    },
+    recruit: arg => {
+      const L = league, [i, j] = arg.split('.').map(Number), r = L.recruits[i];
+      if (!r) return;
+      r.chosen = j; L.roster[r.pos] = r.options[j];
+      syncUserRating(L); store(SAVE_KEY, L);
+      if (offseasonReport) offseason(offseasonReport); else hub();
     },
     upgrade: arg => {
       const L = league, [k, a] = arg.split('.');
@@ -688,7 +809,7 @@ const UI = (() => {
     requestAnimationFrame(frame);
   }
 
-  return { init, card, banner, playSelect, presnap, meter, hudUpdate, sfx };
+  return { init, card, banner, playSelect, presnap, meter, hudUpdate, sfx, driveAnim, settings };
 })();
 
 window.addEventListener('DOMContentLoaded', UI.init);

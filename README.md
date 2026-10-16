@@ -14,7 +14,8 @@ npx serve .          # or: python3 -m http.server
 - **Snap.** Tap the field.
 - **Throw.** Touch anywhere and pull back like a slingshot. A dotted arc shows where the ball lands, and you let go to throw. The dot over each receiver turns green when he's open. If you'd rather point at the spot, switch the aim style in Settings.
 - **Run.** After a catch or handoff, drag to steer and tap to juke. Hit **RUN** to scramble with the quarterback.
-- **Kick.** Tap when the needle is in the green.
+- **Kick.** Tap when the needle is in the green, then watch it fly at the uprights.
+- **Difficulty.** Easy, Normal or Hard in Settings. This changes how good opposing defenses and offenses are.
 
 You play offense. Each opponent drive is simulated from your defense rating against their offense, and the result shows on a scorecard.
 
@@ -25,7 +26,8 @@ Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runn
 - A 9-week schedule built from a conference round robin. Every week the MIAC and WIAC bye teams meet in a cross-border game.
 - The top two teams in each conference play a title game, and the two champions meet in the **Border Bowl**.
 - Wins earn coach points. Spend them to raise player attributes (arm, accuracy, speed, power, hands, leg) and your O-line and defense units.
-- Seniors graduate, freshmen arrive, and returning players develop between seasons.
+- Season stats for every player, a player of the game after each win or loss, and a history tab with a trophy case and past champions.
+- Seniors graduate and returning players develop between seasons. For each open spot you pick one of three recruits, and a better record draws better ones.
 - Progress saves to `localStorage`.
 
 ## Teams

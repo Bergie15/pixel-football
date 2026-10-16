@@ -173,13 +173,14 @@ function finishWeek(L) {
   } else if (L.week === REG_WEEKS + 1) {
     const [mg, wg] = L.post[0];
     const mw = mg.hs > mg.as ? mg.h : mg.a, ww = wg.hs > wg.as ? wg.h : wg.a;
+    L.confChamps = [mw, ww];
     const home = Math.random() < 0.5 ? mw : ww;
     L.post[1] = [{ h: home, a: home === mw ? ww : mw, conf: false, title: 'BORDER BOWL', neutral: true }];
   } else if (L.week === REG_WEEKS + 2) {
     const g = L.post[1][0];
     L.champion = g.hs > g.as ? g.h : g.a;
     const rec = record(L, L.userId);
-    L.history.push({ season: L.season, w: rec.w, l: rec.l, champ: L.champion, won: L.champion === L.userId });
+    L.history.push({ season: L.season, w: rec.w, l: rec.l, champ: L.champion, won: L.champion === L.userId, conf: (L.confChamps || []).includes(L.userId) });
   }
 }
 
@@ -194,18 +195,46 @@ function userInPost(L) {
   return !!g;
 }
 
+// ---- Stats ------------------------------------------------------------------
+function addGameStats(L, st) {
+  const bump = (p, k, v) => { if (!p || !v) return; for (const o of [p.ss || (p.ss = {}), p.cs || (p.cs = {})]) o[k] = (o[k] || 0) + v; };
+  const R = L.roster;
+  for (const k of ['comp', 'att', 'pyds', 'ptd', 'int']) bump(R.QB, k, st[k]);
+  for (const [k, r] of Object.entries(st.rush || {})) { bump(R[k], 'ratt', r.att); bump(R[k], 'ryds', r.yds); bump(R[k], 'rtd', r.td); }
+  for (const [k, r] of Object.entries(st.rec || {})) { bump(R[k], 'rec', r.rec); bump(R[k], 'recyds', r.yds); bump(R[k], 'rectd', r.td); }
+  bump(R.K, 'fg', st.fg); bump(R.K, 'fga', st.fga);
+  for (const pos of POSITIONS) { const p = R[pos.key]; (p.ss || (p.ss = {})).gp = (p.ss.gp || 0) + 1; (p.cs || (p.cs = {})).gp = (p.cs.gp || 0) + 1; }
+}
+
+function statLine(key, s) {
+  s = s || {};
+  const n = k => s[k] || 0;
+  const rush = n('ratt') ? `${n('ratt')} car, ${n('ryds')} yds, ${n('rtd')} TD` : '';
+  const rec = n('rec') ? `${n('rec')} rec, ${n('recyds')} yds, ${n('rectd')} TD` : '';
+  if (key === 'QB') return [n('att') ? `${n('comp')}/${n('att')}, ${n('pyds')} yds, ${n('ptd')} TD, ${n('int')} INT` : '', rush].filter(Boolean).join(' · ');
+  if (key === 'K') return n('fga') ? `${n('fg')}/${n('fga')} FG` : '';
+  if (key === 'RB') return [rush, rec].filter(Boolean).join(' · ');
+  return [rec, rush].filter(Boolean).join(' · ');
+}
+
 // ---- Offseason -------------------------------------------------------------
 function nextSeason(L) {
-  const report = { graduated: [], recruits: [], improved: [] };
+  const report = { graduated: [], improved: [] };
+  const rec = record(L, L.userId);
+  L.recruits = [];
   for (const pos of POSITIONS) {
     const p = L.roster[pos.key];
     if (p.year >= 4) {
-      report.graduated.push(`${pos.label} ${p.name}`);
-      const n = genPlayer(pos, 2.3 + Math.random() * 1.2, 1);
-      L.roster[pos.key] = n;
-      report.recruits.push(`${pos.label} ${n.name}`);
+      const career = statLine(pos.key, p.cs);
+      report.graduated.push(`${pos.label} ${p.name}${career ? ' (' + career + ')' : ''}`);
+      // three recruits to choose from; a better season draws better recruits
+      const base = 1.9 + rec.w / 9 * 1.2;
+      const options = [0, 1, 2].map(i => genPlayer(pos, base + (i === 0 ? 0.6 : i === 1 ? 0 : -0.3) + Math.random() * 0.8, 1));
+      L.roster[pos.key] = options[0];
+      L.recruits.push({ pos: pos.key, options });
     } else {
       p.year++;
+      p.ss = {};
       if (Math.random() < 0.6) {
         const a = pick(pos.attrs);
         if (p[a] < 5) { p[a]++; report.improved.push(`${p.name} +1 ${ATTR_NAMES[a]}`); }

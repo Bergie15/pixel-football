@@ -246,6 +246,10 @@ function buildFieldStrip(home, away) {
   blitRot(g, ez, fx(-5), fy(FIELD_W / 2), 3);
   blitRot(g, ez, fx(105), fy(FIELD_W / 2), 1);
 
+  // Goal posts on the end lines. Height is drawn up the screen with a slight
+  // lean so the uprights read separately from the crossbar.
+  for (const [x, dir] of [[-10, -1], [110, 1]]) drawGoalpost(g, fx(x), fy, dir);
+
   // Pylons
   g.fillStyle = '#ff7a1a';
   for (const x of [0, 100, -10, 110]) { g.fillRect(fx(x) - 1, FIELD_TOP - 4, 3, 3); g.fillRect(fx(x) - 1, yBot + 1, 3, 3); }
@@ -266,4 +270,20 @@ function buildFieldStrip(home, away) {
   g.fillStyle = '#f07c1a';
   for (const x of [24, 47, 53, 76]) g.fillRect(fx(x), 36, 4, 5);
   return c;
+}
+
+const POST_H = 3.2;  // screen px per yard of height
+function drawGoalpost(g, X, fy, dir) {
+  const bar = Math.round(3.33 * POST_H), top = Math.round(10 * POST_H);
+  const y1 = fy(FIELD_W / 2 - 3.08), y2 = fy(FIELD_W / 2 + 3.08), ym = fy(FIELD_W / 2);
+  g.fillStyle = 'rgba(0,0,0,0.25)';
+  g.fillRect(X + dir * 2, ym, 6 * dir, 2);
+  g.fillStyle = '#c9a51d';
+  g.fillRect(X + dir * 4, ym - bar, 2, bar);                 // stanchion
+  g.fillRect(Math.min(X, X + dir * 4), ym - bar, 5, 2);      // gooseneck
+  g.fillStyle = '#f2d335';
+  g.fillRect(X, y1 - bar, 2, y2 - y1 + 2);                    // crossbar
+  for (const yy of [y1, y2]) {                                // uprights
+    for (let k = 0; k < top - bar; k++) g.fillRect(X + Math.round(k * 0.22) * dir, yy - bar - k, 2, 1);
+  }
 }

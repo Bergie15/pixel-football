@@ -5,6 +5,8 @@
 // ---------------------------------------------------------------------------
 
 const ORD = ['', '1st', '2nd', '3rd', '4th'];
+// Shifts opponent defenders on the field and opponent offense in drive sims.
+const DIFFICULTY = { easy: { def: -0.9, off: -0.8 }, normal: { def: 0, off: 0 }, hard: { def: 0.7, off: 0.6 } };
 
 function fmtClock(s) {
   s = Math.max(0, Math.ceil(s));
@@ -27,7 +29,7 @@ class Match {
     this.play = null;
     this.ot = false;
     this.mode = null;  // 'two' during a 2-point try
-    this.st = { comp: 0, att: 0, pyds: 0, ptd: 0, int: 0, ratt: 0, ryds: 0, rtd: 0, sacks: 0, fg: 0, fga: 0, rec: {} };
+    this.st = { comp: 0, att: 0, pyds: 0, ptd: 0, int: 0, ratt: 0, ryds: 0, rtd: 0, sacks: 0, fg: 0, fga: 0, rec: {}, rush: {} };
     const homeT = this.userHome ? this.user : this.opp, awayT = this.userHome ? this.opp : this.user;
     this.homeT = homeT; this.awayT = awayT;
     this.userKit = makeKit(this.user, this.userHome);
@@ -80,7 +82,7 @@ class Match {
   makePlay(def) {
     return new Play({
       playDef: def, los: this.los, ballY: this.ballY, roster: this.roster, units: this.units,
-      oppDef: this.opp.def, offKit: this.userKit, defKit: this.oppKit,
+      oppDef: clamp(this.opp.def + this.diffAdj().def, 0.5, 5.5), offKit: this.userKit, defKit: this.oppKit,
     });
   }
 
@@ -110,6 +112,8 @@ class Match {
     else if (r.carrier && r.type !== 'inc') {
       st.ratt++; st.ryds += yds;
       if (r.type === 'td') st.rtd++;
+      const ru = st.rush[r.carrier.role] || (st.rush[r.carrier.role] = { att: 0, yds: 0, td: 0 });
+      ru.att++; ru.yds += yds; if (r.type === 'td') ru.td++;
     }
 
     if (this.mode === 'two') {
@@ -210,14 +214,34 @@ class Match {
     });
   }
 
+  // Ball flight for kicks, animated by the UI loop before the result shows.
+  kickFlight(f, cb) {
+    if (!this.play) this.play = this.makePlay(PLAYS[0]);
+    this.play.ball = null;
+    this.kickAnim = Object.assign({ t: 0 }, f, { cb });
+  }
+
+  // Where a place kick goes: through the uprights, wide, or short.
+  placeKick(fromX, good, v, short) {
+    const mid = FIELD_W / 2;
+    const ty = good ? mid + (v - 0.5) * 3 : mid + (v < 0.5 ? -1 : 1) * (4 + Math.random() * 3);
+    return short
+      ? { fx: fromX, fy: this.ballY, tx: 100 + Math.random() * 6, ty, peak: 7, dur: 1.5 }
+      : { fx: fromX, fy: this.ballY, tx: 114, ty, peak: 13, dur: 1.2 + (114 - fromX) / 90 };
+  }
+
   kickPAT() {
     const K = this.roster.K;
     const zone = clamp(0.36 + (K.acc - 3) * 0.04, 0.18, 0.5);
+    this.los = 97; this.ballY = FIELD_W / 2;
+    this.play = this.makePlay(PLAYS[0]);
     UI.meter({ title: 'EXTRA POINT', sub: `#${K.num} ${K.name}`, zone, speed: 1.0 }, v => {
       const good = Math.abs(v - 0.5) < zone / 2;
-      if (good) this.score.u += 1;
-      UI.hudUpdate(this);
-      UI.banner(good ? "IT'S GOOD!" : 'NO GOOD', good ? 'PAT +1' : (v < 0.5 ? 'Wide left' : 'Wide right'), () => this.afterUserScore(), good ? 'good' : 'bad');
+      this.kickFlight(this.placeKick(90, good, v, false), () => {
+        if (good) this.score.u += 1;
+        UI.hudUpdate(this);
+        UI.banner(good ? "IT'S GOOD!" : 'NO GOOD', good ? 'PAT +1' : (v < 0.5 ? 'Wide left' : 'Wide right'), () => this.afterUserScore(), good ? 'good' : 'bad');
+      });
     });
   }
 
@@ -229,18 +253,22 @@ class Match {
   fieldGoal() {
     const K = this.roster.K;
     const d = Math.round(100 - this.los + 17);
+    const range = 44 + 4 * K.leg;
     let zone = clamp(0.42 - (d - 20) * 0.0075 + (K.acc - 3) * 0.035, 0.06, 0.45);
-    if (d > 44 + 4 * K.leg) zone *= 0.4;
+    if (d > range) zone *= 0.4;
     UI.meter({ title: `${d}-YARD FIELD GOAL`, sub: `#${K.num} ${K.name}`, zone, speed: 0.8 + d / 55 }, v => {
       this.st.fga++;
       const good = Math.abs(v - 0.5) < zone / 2;
+      const short = !good && d > range && Math.random() < 0.6;
       if (!this.ot) this.clock -= 5;
-      if (good) { this.score.u += 3; this.st.fg++; }
-      UI.hudUpdate(this);
-      UI.banner(good ? "IT'S GOOD!" : 'NO GOOD', good ? `${d}-yard field goal` : (v < 0.5 ? 'Wide left' : 'Wide right'), () => {
-        if (this.ot) return this.oppOT();
-        this.afterClock(() => this.possessionOver(good ? 25 : Math.max(20, 100 - (this.los - 7))));
-      }, good ? 'good' : 'bad');
+      this.kickFlight(this.placeKick(this.los - 7, good, v, short), () => {
+        if (good) { this.score.u += 3; this.st.fg++; }
+        UI.hudUpdate(this);
+        UI.banner(good ? "IT'S GOOD!" : 'NO GOOD', good ? `${d}-yard field goal` : short ? 'Short' : (v < 0.5 ? 'Wide left' : 'Wide right'), () => {
+          if (this.ot) return this.oppOT();
+          this.afterClock(() => this.possessionOver(good ? 25 : Math.max(20, 100 - (this.los - 7))));
+        }, good ? 'good' : 'bad');
+      });
     });
   }
 
@@ -254,8 +282,11 @@ class Match {
       if (land >= 100) { start = 20; sub = 'Touchback'; }
       else { start = clamp(Math.round(100 - land + Math.random() * 8), 1, 99); sub = `Fielded at the ${100 - land < 50 ? 100 - land : land}`; }
       if (!this.ot) this.clock -= 8;
-      UI.hudUpdate(this);
-      UI.banner(`PUNT ${d} YDS`, sub, () => this.afterClock(() => this.possessionOver(start)));
+      const fly = { fx: this.los - 12, fy: this.ballY, tx: Math.min(land, 108), ty: clamp(this.ballY + gauss() * 7, 4, FIELD_W - 4), peak: 16, dur: 2.2 };
+      this.kickFlight(fly, () => {
+        UI.hudUpdate(this);
+        UI.banner(`PUNT ${d} YDS`, sub, () => this.afterClock(() => this.possessionOver(start)));
+      });
     });
   }
 
@@ -263,6 +294,10 @@ class Match {
     if (this.ot) return this.oppOT();
     this.oppPossession(oppStart);
   }
+
+  // ---- difficulty -------------------------------------------------------------
+  diffAdj() { return DIFFICULTY[this.diff] || DIFFICULTY.normal; }
+  oppSim() { return Object.assign({}, this.opp, { off: this.opp.off + this.diffAdj().off }); }
 
   // ---- opponent ----------------------------------------------------------------
   oppPossession(startYd) {
@@ -272,7 +307,7 @@ class Match {
     let clutch = null;
     if (this.q === 4 && this.clock < 300) clutch = this.score.o > this.score.u ? 'protect' : this.score.o < this.score.u ? 'hurry' : null;
     if (this.q === 2 && this.clock < 120) clutch = 'hurry';
-    const res = simOppDrive(this.opp, this.units.def, startYd, { clutch, scale: this.qlen / 600 });
+    const res = simOppDrive(this.oppSim(), this.units.def, startYd, { clutch, scale: this.qlen / 600 });
     let resultLabel = res.result;
     const before = this.clock;
     if (res.time >= this.clock) {
@@ -292,10 +327,12 @@ class Match {
     let pts = 0;
     if (resultLabel === 'TD') pts = Math.random() < 0.95 ? 7 : 6;
     else if (resultLabel === 'FG') pts = 3;
-    this.score.o += pts;
-    UI.hudUpdate(this);
     const names = { TD: 'TOUCHDOWN', FG: 'FIELD GOAL', 'MISSED FG': 'MISSED FIELD GOAL', PUNT: 'PUNT', INTERCEPTION: 'INTERCEPTION!', FUMBLE: 'FUMBLE RECOVERED!', DOWNS: 'STOPPED ON DOWNS' };
     const good = ['PUNT', 'INTERCEPTION', 'FUMBLE', 'MISSED FG', 'DOWNS'].includes(resultLabel);
+    const endX = clamp(100 - (startYd + res.yards), -5, 100);
+    UI.driveAnim(100 - startYd, endX, () => {
+    this.score.o += pts;
+    UI.hudUpdate(this);
     UI.card({
       kicker: `${this.opp.mascot.toUpperCase()} BALL`,
       title: names[resultLabel] || resultLabel,
@@ -308,6 +345,7 @@ class Match {
       buttons: [{ label: 'CONTINUE', cls: 'go', fn: () => this.afterClock(() => this.beginDrive(res.userStart)) }],
     });
     UI.sfx(pts ? 'oppscore' : good ? 'good' : 'tick');
+    });
   }
 
   // ---- overtime -----------------------------------------------------------------
@@ -319,7 +357,7 @@ class Match {
   oppOT() {
     const lead = this.score.u - this.score.o;
     const need = lead >= 6 ? 'TD' : lead >= 1 ? 'FG' : null;
-    const res = simOppDrive(this.opp, this.units.def, 75, { ot: true, need });
+    const res = simOppDrive(this.oppSim(), this.units.def, 75, { ot: true, need });
     let pts = res.result === 'TD' ? 7 : res.result === 'FG' ? 3 : 0;
     if (pts === 7 && lead === 8) pts = Math.random() < 0.45 ? 8 : 6;
     this.score.o += pts;
