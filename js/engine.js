@@ -611,10 +611,11 @@ class Play {
 
     // line of scrimmage + line to gain
     const top = FIELD_TOP, bot = sy(FIELD_W);
-    ctx.fillStyle = 'rgba(70,140,255,0.85)'; ctx.fillRect(sx(this.los), top, 1, bot - top);
+    if (this.noLines) fd = null;
+    else { ctx.fillStyle = 'rgba(70,140,255,0.85)'; ctx.fillRect(sx(this.los), top, 1, bot - top); }
     if (fd && fd < 100) { ctx.fillStyle = 'rgba(255,224,60,0.9)'; ctx.fillRect(sx(fd), top, 1, bot - top); }
     // chain gang on the near sideline
-    ctx.fillStyle = '#ff7a1a'; ctx.fillRect(sx(this.los) - 1, bot + 3, 3, 5);
+    if (!this.noLines) { ctx.fillStyle = '#ff7a1a'; ctx.fillRect(sx(this.los) - 1, bot + 3, 3, 5); }
     if (fd && fd < 100) { ctx.fillStyle = '#ffd23c'; ctx.fillRect(sx(fd) - 1, bot + 3, 3, 5); }
 
     // aim guide
@@ -687,6 +688,132 @@ class Play {
     ctx.fillStyle = '#ffe14a';
     ctx.fillRect(cx - 4, cy, 3, 1); ctx.fillRect(cx + 2, cy, 3, 1);
     ctx.fillRect(cx, cy - 3, 1, 2); ctx.fillRect(cx, cy + 2, 1, 2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kickoff return. The opponent kicks from their 35 (x = 65) toward x = 0;
+// the user's returner fields it and runs it back.
+// ---------------------------------------------------------------------------
+class KickoffPlay extends Play {
+  setup() {
+    this.kickoff = true;
+    this.noLines = true;
+    this.playDef = { type: 'kick', routes: {} };
+    const R = this.roster, dr = this.dr = this.oppDef;
+    const sf = s => 0.9 + 0.035 * s;
+    this.off = []; this.def = []; this.receivers = [];
+    // Return team: front line, second line, two deep
+    for (const y of [7, 17, 26.7, 36.3, 46.3]) this.off.push(this.mk('off', 'KR', 'TE', 50, y, BASE_SPEED.TE * sf(3), 20));
+    for (const y of [11, 21.5, 31.8, 42]) this.off.push(this.mk('off', 'KR', 'WR', 36, y, BASE_SPEED.WR * sf(3), 22));
+    this.returner = this.mk('off', 'RB', 'RB', 5, 26.7, BASE_SPEED.RB * sf(R.RB.spd), 24);
+    this.returner.player = R.RB;
+    const up = this.mk('off', 'KR', 'WR', 14, 22, BASE_SPEED.WR * sf(3), 22);
+    this.off.push(this.returner, up);
+    this.qb = this.returner;  // what blockers protect before the catch
+    // Kicking team: ten across at their 35, kicker a few yards back
+    for (let i = 0; i < 10; i++) {
+      const y = 3.5 + i * (FIELD_W - 7) / 9;
+      if (Math.abs(y - FIELD_W / 2) < 2.5) continue;
+      this.def.push(this.mk('def', 'KC', 'LB', 65, y, BASE_SPEED.LB * sf(dr), 11 + 2.5 * dr));
+    }
+    this.def.push(this.mk('def', 'KC', 'LB', 65, FIELD_W / 2 + 6, BASE_SPEED.LB * sf(dr), 11 + 2.5 * dr));
+    this.kicker = this.mk('def', 'K', 'LB', 71, FIELD_W / 2 - 1, BASE_SPEED.S * sf(dr), 14);
+    this.def.push(this.kicker);
+    for (const o of this.off) { o.setX = o.x; o.openField = true; }
+    for (const d of this.def) d.lane = d.y;
+    this.ball = { x: 65, y: FIELD_W / 2, h: 0.3, holder: null, air: false };
+    this.camX = 40;
+  }
+
+  snap() {
+    if (this.phase !== 'presnap') return;
+    this.phase = 'approach';
+    this.events.push('hike');
+  }
+
+  canThrow() { return false; }
+
+  updateCam(dt) {
+    let target = 40;
+    if (this.phase === 'air') target = this.ball.x + 4;
+    else if (this.phase === 'run' || this.phase === 'dead') target = (this.carrier ? this.carrier.x : this.ball.x) + 7;
+    this.camX += (target - this.camX) * Math.min(1, dt * 2.6);
+  }
+
+  update(dt) {
+    if (this.phase === 'presnap') { this.updateCam(dt); return; }
+    if (this.phase === 'dead') return super.update(dt);
+    this.t += dt;
+    const t = this.t, b = this.ball;
+    // kicker approach, then the kick
+    if (this.phase === 'approach') {
+      this.steer(this.kicker, b.x, b.y, dt, 0.8, 0);
+      for (const d of this.def) if (d !== this.kicker) this.steer(d, b.x - 0.5, d.lane, dt, 0.5, 0);
+      if (dist(this.kicker, b) < 0.8 || t > 1.2) {
+        const leg = 52 + this.dr * 2.5 + gauss() * 4;
+        b.fx = b.x; b.fy = b.y; b.tx = clamp(b.x - leg, -6, 20); b.ty = clamp(FIELD_W / 2 + gauss() * 7, 8, FIELD_W - 8);
+        b.t0 = t; b.dur = 2.9; b.peak = 18; b.air = true;
+        this.phase = 'air';
+        this.events.push('kick');
+      }
+    }
+    if (this.phase === 'air') {
+      const u = Math.min(1, (t - b.t0) / b.dur);
+      b.x = lerp(b.fx, b.tx, u); b.y = lerp(b.fy, b.ty, u); b.h = 4 * b.peak * u * (1 - u) + 0.3 * (1 - u);
+      // the returner settles under it, the rest set up a wall
+      this.steer(this.returner, b.tx - 0.3, b.ty, dt, 1, 0.8);
+      for (const o of this.off) if (o !== this.returner && !o.engaged) {
+        if (t - b.t0 > 1.4) this.blockerAI(o, dt);
+        else this.steer(o, Math.min(o.setX, b.tx + 22) - (t - b.t0) * 4, o.y, dt, 0.7, 0.5);
+      }
+      for (const d of this.def) if (!d.blockedBy) this.steer(d, b.tx + 6, lerp(d.lane, b.ty, 0.35), dt, d === this.kicker ? 0.7 : 1, 0);
+      if (u >= 1) {
+        this.returner.x = b.tx; this.returner.y = b.ty;
+        this.makeRunner(this.returner);
+        this.events.push('catch');
+      }
+      this.updateBlocks(dt);
+      for (const e of this.ents) {
+        if (!e.engaged && !e.blockedBy) { e.x += e.vx * dt; e.y += e.vy * dt; }
+        e.anim += dt * Math.hypot(e.vx, e.vy);
+      }
+      this.updateCam(dt);
+      return;
+    }
+    if (this.phase === 'approach') {
+      for (const e of this.ents) { e.x += e.vx * dt; e.y += e.vy * dt; e.anim += dt * Math.hypot(e.vx, e.vy); }
+      this.updateCam(dt);
+      return;
+    }
+    super.update(dt);  // the return itself plays like any other run
+  }
+
+  updateOff(o, dt) {
+    if (o.engaged) return;
+    if (o === this.carrier) return this.updateCarrier(o, dt);
+    if (this.t < o.stunUntil) { this.steer(o, o.x, o.y, dt, 0.2); return; }
+    this.blockerAI(o, dt);
+  }
+
+  updateDef(d, dt) {
+    if (d.blockedBy) return;
+    if (this.t < d.stunUntil) { this.steer(d, d.x, d.y, dt, 0.15); return; }
+    if (this.carrier && this.t >= d.reactAt) return this.pursue(d, this.carrier, dt);
+    this.steer(d, d.x - 5, d.lane, dt, 1, 0);
+  }
+
+  tackle(c, d) {
+    c.down = true;
+    this.events.push('tackle');
+    if (c.x <= 0) return this.endPlay('tackle', 'TOUCHBACK', 25);
+    this.endPlay('tackle', '', Math.min(c.x + (c.vx > 1 ? 0.5 : 0), 99.5));
+  }
+
+  endPlay(type, label, spot) {
+    if (type === 'oob' && spot !== undefined && spot <= 0) { type = 'tackle'; label = 'TOUCHBACK'; spot = 25; }
+    super.endPlay(type, label, spot);
+    if (this.result) this.result.kickoff = true;
   }
 }
 

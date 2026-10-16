@@ -54,6 +54,25 @@ function textCanvas(str, s, fill, outline) {
   return c;
 }
 
+// Bigger 5x7 digits for the painted yard numbers.
+const DIGITS57 = {
+  '0': [' ### ', '#   #', '#  ##', '# # #', '##  #', '#   #', ' ### '],
+  '1': ['  #  ', ' ##  ', '  #  ', '  #  ', '  #  ', '  #  ', ' ### '],
+  '2': [' ### ', '#   #', '    #', '   # ', '  #  ', ' #   ', '#####'],
+  '3': ['#####', '   # ', '  #  ', '   # ', '    #', '#   #', ' ### '],
+  '4': ['   # ', '  ## ', ' # # ', '#  # ', '#####', '   # ', '   # '],
+  '5': ['#####', '#    ', '#### ', '    #', '    #', '#   #', ' ### '],
+};
+function yardNumberCanvas(str, color) {
+  const s = 2, gap = 2;
+  const c = mkCanvas(str.length * (5 * s + gap) - gap, 7 * s), g = c.getContext('2d');
+  g.fillStyle = color;
+  [...str].forEach((ch, i) => DIGITS57[ch].forEach((row, y) => [...row].forEach((v, x) => {
+    if (v === '#') g.fillRect(i * (5 * s + gap) + x * s, y * s, s, s);
+  })));
+  return c;
+}
+
 // Draw a canvas centred at (cx, cy) rotated by quarter turns.
 function blitRot(ctx, img, cx, cy, quarter) {
   ctx.save();
@@ -214,7 +233,7 @@ function buildFieldStrip(home, away) {
   const numColor = 'rgba(238,242,233,0.85)';
   for (let x = 10; x <= 90; x += 10) {
     const label = String(x <= 50 ? x : 100 - x);
-    const t = textCanvas(label, 3, numColor, null);
+    const t = yardNumberCanvas(label, numColor);
     const arrow = x === 50 ? 0 : (x < 50 ? -1 : 1);
     // near side (bottom), upright
     blitRot(g, t, fx(x) + 1, fy(FIELD_W - 11), 0);
@@ -223,7 +242,7 @@ function buildFieldStrip(home, away) {
     if (arrow) {
       g.fillStyle = numColor;
       for (const yy of [fy(FIELD_W - 11), fy(11)]) {
-        const ax = fx(x) + arrow * 19;
+        const ax = fx(x) + arrow * 15;
         for (let k = 0; k < 3; k++) g.fillRect(ax - arrow * k, yy - k, 1, 2 * k + 1);
       }
     }

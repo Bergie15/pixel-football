@@ -42,13 +42,34 @@ class Match {
   // ---- lifecycle ------------------------------------------------------------
   start() {
     this.userReceivedFirst = Math.random() < 0.5;
-    const who = this.userReceivedFirst ? this.user : this.opp;
     UI.hudUpdate(this);
-    UI.card({
-      title: 'GET READY!',
-      lines: [this.title || `${this.awayT.name} at ${this.homeT.name}`, `${who.mascot} win the toss and receive.`],
-      buttons: [{ label: 'KICK OFF', cls: 'go', fn: () => (this.userReceivedFirst ? this.beginDrive(25) : this.oppPossession(25)) }],
+    if (this.userReceivedFirst) return this.kickoffReturn();
+    this.camX = 50;
+    UI.ready(() => this.oppPossession(25));
+  }
+
+  // Opponent kicks to the user, who returns it live.
+  kickoffReturn() {
+    this.mode = null;
+    this.play = new KickoffPlay({
+      los: 0, ballY: FIELD_W / 2, roster: this.roster, units: this.units,
+      oppDef: clamp(this.opp.def + this.diffAdj().def, 0.5, 5.5), offKit: this.userKit, defKit: this.oppKit,
     });
+    UI.hudUpdate(this);
+    UI.ready(() => this.play.snap());
+  }
+
+  onKickoffEnd(r) {
+    if (!this.ot) this.clock -= Math.ceil(r.time);
+    const who = r.carrier && r.carrier.player ? `#${r.carrier.player.num} ${r.carrier.player.name}` : '';
+    if (r.type === 'td') {
+      this.score.u += 6;
+      UI.hudUpdate(this);
+      return UI.banner('TOUCHDOWN!', `Kick return · ${who}`, () => this.conversion(), 'td');
+    }
+    const spot = Math.round(clamp(r.spot, 1, 99));
+    UI.banner(r.label === 'TOUCHBACK' ? 'TOUCHBACK' : `RETURN TO THE ${spot > 50 ? 'OPP ' + (100 - spot) : spot}`, r.label === 'TOUCHBACK' ? 'Ball on the 25' : who,
+      () => this.afterClock(() => this.beginDrive(spot)), spot >= 40 ? 'good' : '');
   }
 
   beginDrive(los) {
@@ -95,6 +116,7 @@ class Match {
 
   // ---- play results -----------------------------------------------------------
   onPlayEnd(r) {
+    if (r.kickoff) return this.onKickoffEnd(r);
     const p = this.play;
     const st = this.st;
     const yds = r.yards;
@@ -185,7 +207,7 @@ class Match {
       return UI.card({
         title: 'HALFTIME',
         lines: [this.scoreLine(), this.statLine()],
-        buttons: [{ label: '2ND HALF', cls: 'go', fn: () => { UI.hudUpdate(this); this.userReceivedFirst ? this.oppPossession(25) : this.beginDrive(25); } }],
+        buttons: [{ label: '2ND HALF', cls: 'go', fn: () => { UI.hudUpdate(this); this.userReceivedFirst ? this.oppPossession(25) : this.kickoffReturn(); } }],
       });
     }
     // end of regulation
@@ -342,7 +364,7 @@ class Match {
         `${res.plays} plays · ${res.yards} yds · ${fmtClock(Math.min(res.time, before))}`,
         pts === 6 ? 'Extra point blocked!' : '',
       ],
-      buttons: [{ label: 'CONTINUE', cls: 'go', fn: () => this.afterClock(() => this.beginDrive(res.userStart)) }],
+      buttons: [{ label: 'CONTINUE', cls: 'go', fn: () => this.afterClock(() => (pts ? this.kickoffReturn() : this.beginDrive(res.userStart))) }],
     });
     UI.sfx(pts ? 'oppscore' : good ? 'good' : 'tick');
     });

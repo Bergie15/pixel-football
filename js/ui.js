@@ -99,7 +99,7 @@ const UI = (() => {
     if (!p) return;
     const pt = toInternal(e);
     if (p.phase === 'presnap' && match.awaitSnap) {
-      match.awaitSnap = false; $('tapHint').hidden = true; p.snap(); return;
+      match.awaitSnap = false; p.snap(); return;
     }
     if (p.canThrow()) {
       aiming = { id: e.pointerId, ax: pt.x, ay: pt.y, len: 0 };
@@ -108,7 +108,7 @@ const UI = (() => {
       return;
     }
     // You can put your thumb down during the handoff; steering starts once the runner has the ball
-    if ((p.phase === 'run' && p.carrier) || p.phase === 'handoff') {
+    if ((p.phase === 'run' && p.carrier) || p.phase === 'handoff' || (p.kickoff && (p.phase === 'air' || p.phase === 'approach'))) {
       stick = { id: e.pointerId, ax: pt.x, ay: pt.y, x0: pt.x, y0: pt.y, t0: performance.now(), moved: false, k: pt.k };
       input.active = true; input.mag = 0;
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
@@ -238,11 +238,20 @@ const UI = (() => {
     g.fillRect(px(-4.2) - 1, py(0) - 1, 3, 3);
   }
 
+  // The ball is snapped automatically a beat after the play call; a tap snaps it sooner.
   function presnap(m) {
     m.awaitSnap = true;
-    const h = $('tapHint');
-    h.textContent = 'TAP TO SNAP';
-    h.hidden = false;
+    const p = m.play;
+    setTimeout(() => { if (match === m && m.awaitSnap && m.play === p && !paused) { m.awaitSnap = false; p.snap(); } }, 700);
+  }
+
+  // "GET READY!" + Kick Off, like the real thing
+  function ready(fn) {
+    hideSheet();
+    const r = $('ready');
+    r.hidden = false;
+    const btn = r.querySelector('button');
+    btn.onclick = () => { sfx('click'); ensureAudio(); r.hidden = true; fn(); };
   }
 
   function meter(cfg, cb) {
@@ -281,7 +290,7 @@ const UI = (() => {
     $('hAway').classList.toggle('me', !m.userHome);
     $('hHome').classList.toggle('me', m.userHome);
     $('hClock').textContent = m.ot ? (m.otRound > 1 ? `OT${m.otRound}` : 'OT') : `${ORD[Math.min(m.q, 4)]} Qtr ${fmtClock(m.clock)}`;
-    $('chip').textContent = m.situation();
+    $('hDown').textContent = m.play && !m.play.kickoff && !m.kickAnim ? m.situation().split(' · ')[0] : '';
   }
 
   // ---- main loop ---------------------------------------------------------------
@@ -321,14 +330,13 @@ const UI = (() => {
     match.driveAnim = { from, to, t: 0, dur: clamp(Math.abs(to - from) / 45, 0.8, 1.8), cb };
   }
 
-  let last = 0, runHints = 0;
+  let last = 0;
   function frame(ts) {
     const dt = Math.min(0.05, (ts - last) / 1000 || 0);
     last = ts;
     keyInput();
     if (match) {
       const p = match.play, k = match.kickAnim, dv = match.driveAnim;
-      $('chip').hidden = !p || !!k;
       $('btnScramble').hidden = !(p && !k && p.canThrow());
       if (k) {
         // kick in flight
@@ -348,11 +356,6 @@ const UI = (() => {
           p.reported = true;
           aiming = null; stick = null; input.active = false;
           match.onPlayEnd(p.result);
-        }
-        if (p.phase === 'run' && !p.hinted && runHints < 3 && !stick) {
-          p.hinted = true; runHints++;
-          const h = $('tapHint'); h.textContent = 'DRAG OR SWIPE TO RUN · TAP TO JUKE'; h.hidden = false;
-          setTimeout(() => { if (!match || !match.awaitSnap) h.hidden = true; }, 1600);
         }
         p.draw(ctx, W, match.strip, match.mode === 'two' ? null : match.fd);
       } else if (dv) {
@@ -669,7 +672,7 @@ const UI = (() => {
   }
 
   function endMatch(m) {
-    $('hud').hidden = true; $('chip').hidden = true; $('btnScramble').hidden = true; $('tapHint').hidden = true;
+    $('hud').hidden = true; $('chip').hidden = true; $('btnScramble').hidden = true; $('tapHint').hidden = true; $('ready').hidden = true;
     $('rotate').hidden = true;
     match = null;
     const won = m.score.u > m.score.o;
@@ -774,7 +777,7 @@ const UI = (() => {
 
   function quitMatch() {
     paused = false; match = null;
-    for (const id of ['hud', 'chip', 'tapHint', 'btnScramble', 'sheet', 'rotate']) $(id).hidden = true;
+    for (const id of ['hud', 'chip', 'tapHint', 'btnScramble', 'sheet', 'rotate', 'ready']) $(id).hidden = true;
     matchCtx && matchCtx.kind === 'season' ? hub() : title();
   }
 
@@ -809,7 +812,7 @@ const UI = (() => {
         if (bannerDone) return bannerDone();
         const p = match && match.play;
         if (!p) return;
-        if (p.phase === 'presnap' && match.awaitSnap) { match.awaitSnap = false; $('tapHint').hidden = true; p.snap(); }
+        if (p.phase === 'presnap' && match.awaitSnap) { match.awaitSnap = false; p.snap(); }
         else p.juke();
       }
     });
@@ -819,7 +822,7 @@ const UI = (() => {
     requestAnimationFrame(frame);
   }
 
-  return { init, card, banner, playSelect, presnap, meter, hudUpdate, sfx, driveAnim, settings };
+  return { init, card, banner, playSelect, presnap, ready, meter, hudUpdate, sfx, driveAnim, settings };
 })();
 
 window.addEventListener('DOMContentLoaded', UI.init);

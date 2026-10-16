@@ -11,7 +11,8 @@ npx serve .          # or: python3 -m http.server
 ## How to play
 
 - **Call a play.** Six pass concepts (Four Verts, Slants, Mesh, Curl Flat, Smash, PA Post) and two runs (HB Dive, HB Toss). On 4th down you can also punt or kick a field goal.
-- **Snap.** Tap the field.
+- **Kickoffs.** When you receive, both teams line up and you tap **Kick Off**. Then return it yourself.
+- **Snap.** The ball is snapped a moment after you call the play. Tap to snap it sooner.
 - **Throw.** Touch anywhere and pull back like a slingshot. A dotted arc shows where the ball lands, and you let go to throw. The dot over each receiver turns green when he's open. If you'd rather point at the spot, switch the aim style in Settings.
 - **Run.** On run plays and after a catch, drag to steer, swipe to make a hard cut, and tap to juke. You can put your thumb down during the handoff. Hit **RUN** to scramble with the quarterback.
 - **Kick.** Tap when the needle is in the green, then watch it fly at the uprights.
