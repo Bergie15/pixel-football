@@ -80,9 +80,11 @@ const SKINS = ['#f1c27d', '#c68642', '#8d5524', '#e0ac69', '#5c3a21', '#ffdbac']
 function makeKit(team, home) {
   const white = '#f2f2f2';
   const c2IsLight = lum(team.c2) > 0.85;
+  // Some schools wear a helmet that isn't their primary color (Saint John's: white)
+  const helmet = team.helmet || team.c1, stripe = team.stripe || team.c2;
   return home
-    ? { helmet: team.c1, stripe: team.c2, jersey: team.c1, num: team.c2, pants: c2IsLight ? '#e6e6e6' : team.c2, sock: team.c1 }
-    : { helmet: team.c1, stripe: team.c2, jersey: white, num: team.c1, pants: c2IsLight ? team.c1 : team.c2, sock: white };
+    ? { helmet, stripe, jersey: team.c1, num: team.c2, pants: c2IsLight ? '#e6e6e6' : team.c2, sock: team.c1 }
+    : { helmet, stripe, jersey: white, num: team.c1, pants: c2IsLight ? team.c1 : team.c2, sock: white };
 }
 
 // ---- Player sprites ----------------------------------------------------------
@@ -119,7 +121,7 @@ const LEGS = {
 const spriteCache = new Map();
 
 function getSprite(kit, skin, pose, facing) {
-  const key = kit.jersey + kit.helmet + kit.pants + skin + pose + facing;
+  const key = kit.jersey + kit.helmet + kit.stripe + kit.pants + skin + pose + facing;
   let c = spriteCache.get(key);
   if (c) return c;
   const body = pose === 'front' ? SPR_FRONT : SPR_SIDE;

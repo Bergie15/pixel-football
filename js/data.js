@@ -15,7 +15,7 @@ const TEAMS = [
   { id: 'GUST',  name: 'Gustavus Adolphus',  mascot: 'Gusties',       conf: 'MIAC', city: 'St. Peter, MN',     c1: '#1a1a1a', c2: '#e6b711', off: 3.1, def: 3.2 },
   { id: 'HAM',   name: 'Hamline',            mascot: 'Pipers',        conf: 'MIAC', city: 'Saint Paul, MN',    c1: '#a6192e', c2: '#a2aaad', off: 2.0, def: 1.9 },
   { id: 'MAC',   name: 'Macalester',         mascot: 'Scots',         conf: 'MIAC', city: 'Saint Paul, MN',    c1: '#d44500', c2: '#01426a', off: 1.8, def: 1.8 },
-  { id: 'SJU',   name: "Saint John's",       mascot: 'Johnnies',      conf: 'MIAC', city: 'Collegeville, MN',  c1: '#c8102e', c2: '#ffffff', off: 4.6, def: 4.4 },
+  { id: 'SJU',   name: "Saint John's",       mascot: 'Johnnies',      conf: 'MIAC', city: 'Collegeville, MN',  c1: '#c8102e', c2: '#ffffff', helmet: '#f4f4f4', stripe: '#c8102e', off: 4.6, def: 4.4 },
   { id: 'SMU',   name: "Saint Mary's",       mascot: 'Cardinals',     conf: 'MIAC', city: 'Winona, MN',        c1: '#b5121b', c2: '#f3f3f3', off: 1.7, def: 1.8 },
   { id: 'OLAF',  name: 'St. Olaf',           mascot: 'Oles',          conf: 'MIAC', city: 'Northfield, MN',    c1: '#111111', c2: '#f1be48', off: 2.5, def: 2.4 },
   { id: 'CSS',   name: 'St. Scholastica',    mascot: 'Saints',        conf: 'MIAC', city: 'Duluth, MN',        c1: '#00447c', c2: '#ffc72c', off: 2.8, def: 2.6 },

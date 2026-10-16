@@ -107,8 +107,9 @@ const UI = (() => {
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
       return;
     }
-    if (p.phase === 'run' && p.carrier) {
-      stick = { id: e.pointerId, ax: pt.x, ay: pt.y, t0: performance.now(), moved: false, k: pt.k };
+    // You can put your thumb down during the handoff; steering starts once the runner has the ball
+    if ((p.phase === 'run' && p.carrier) || p.phase === 'handoff') {
+      stick = { id: e.pointerId, ax: pt.x, ay: pt.y, x0: pt.x, y0: pt.y, t0: performance.now(), moved: false, k: pt.k };
       input.active = true; input.mag = 0;
       try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     }
@@ -137,7 +138,11 @@ const UI = (() => {
       if (p.canThrow() && aiming.len > 5 && p.aim) p.throwTo(p.aim.x, p.aim.y);
       p.aim = null; aiming = null;
     } else if (stick && stick.id === e.pointerId) {
-      if (!stick.moved && performance.now() - stick.t0 < 260) p.juke();
+      const pt = toInternal(e), held = performance.now() - stick.t0;
+      const sdx = pt.x - stick.x0, sdy = pt.y - stick.y0, slen = Math.hypot(sdx, sdy) * stick.k;
+      if (!stick.moved && held < 260) p.juke();
+      else if (held < 320 && slen > 24) p.cut(sdx / SX, sdy / SY);  // swipe = cut
+
       stick = null; input.active = false; input.mag = 0;
     }
   }
@@ -316,7 +321,7 @@ const UI = (() => {
     match.driveAnim = { from, to, t: 0, dur: clamp(Math.abs(to - from) / 45, 0.8, 1.8), cb };
   }
 
-  let last = 0;
+  let last = 0, runHints = 0;
   function frame(ts) {
     const dt = Math.min(0.05, (ts - last) / 1000 || 0);
     last = ts;
@@ -343,6 +348,11 @@ const UI = (() => {
           p.reported = true;
           aiming = null; stick = null; input.active = false;
           match.onPlayEnd(p.result);
+        }
+        if (p.phase === 'run' && !p.hinted && runHints < 3 && !stick) {
+          p.hinted = true; runHints++;
+          const h = $('tapHint'); h.textContent = 'DRAG OR SWIPE TO RUN · TAP TO JUKE'; h.hidden = false;
+          setTimeout(() => { if (!match || !match.awaitSnap) h.hidden = true; }, 1600);
         }
         p.draw(ctx, W, match.strip, match.mode === 'two' ? null : match.fd);
       } else if (dv) {

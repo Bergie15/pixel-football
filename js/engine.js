@@ -143,6 +143,21 @@ class Play {
     this.events.push('juke');
   }
 
+  // A quick swipe: hard cut in the swipe direction, with a juke if it's ready.
+  cut(dx, dy) {
+    const c = this.carrier;
+    if (!c || this.phase !== 'run') return;
+    this.userTook = true;
+    if (dx < -0.2) dx = -0.2;  // a cut never turns the runner fully around
+    const m = Math.hypot(dx, dy) || 1;
+    c.cutDx = dx / m; c.cutDy = dy / m; c.cutUntil = this.t + 0.55;
+    if (this.t >= (c.jukeCD || 0)) {
+      c.jukeUntil = this.t + 0.3; c.jukeCD = this.t + 1.0;
+      c.vx += c.cutDx * 3; c.vy += c.cutDy * 4;
+      this.events.push('juke');
+    }
+  }
+
   throwTo(tx, ty) {
     if (!this.canThrow()) return false;
     const q = this.qb, P = this.roster.QB;
@@ -347,6 +362,7 @@ class Play {
     if (inp && inp.active && inp.mag > 0.2) this.userTook = true;
     let dx = 1, dy = 0;
     if (this.userTook && inp && inp.active && inp.mag > 0.2) { dx = inp.dx; dy = inp.dy; c.lastDy = dy; }
+    else if (this.t < (c.cutUntil || 0)) { dx = c.cutDx; dy = c.cutDy; c.lastDy = dy; }
     else if (!this.userTook && c.path && c.pathIdx < c.path.length) { this.followPath(c, dt); return; }
     else if (this.userTook) { dy = (c.lastDy || 0) * 0.5; dx = 1; c.lastDy = (c.lastDy || 0) * Math.pow(0.1, dt); }
     const m = Math.hypot(dx, dy) || 1;
