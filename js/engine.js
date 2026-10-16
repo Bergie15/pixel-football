@@ -637,7 +637,7 @@ class Play {
       if (px < -12 || px > W + 12) continue;
       if (e === target) this.ring(ctx, px, py, '#ffffff');
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
-      ctx.fillRect(px - 4, py, 9, 2);
+      ctx.fillRect(px - 5, py, 11, 2);
       const kit = e.side === 'off' ? this.offKit : this.defKit;
       const sp = Math.hypot(e.vx, e.vy);
       let facing = e.side === 'off' ? 1 : -1;
@@ -670,7 +670,7 @@ class Play {
     const b = this.ball;
     if (b) {
       let bx = sx(b.x), by = sy(b.y);
-      if (b.holder) { bx += (b.holder.vx < -0.8 ? -3 : 3); by -= 8; }
+      if (b.holder) { bx += (b.holder.vx < -0.8 ? -4 : 4); by -= 9; }
       else {
         ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx - 1, by, 3, 1);
         by -= q(b.h * POST_H);

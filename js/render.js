@@ -7,11 +7,11 @@
 // on screen than across-field yards.
 // ---------------------------------------------------------------------------
 
-const SX = 11;           // screen px per yard along the field
-const SY = 3.4;          // screen px per yard across the field
+const SX = 9.5;          // screen px per yard along the field
+const SY = 2.8;          // screen px per yard across the field
 const FIELD_W = 53.333;  // sideline to sideline
-const FIELD_TOP = 40;    // internal px where the far sideline sits
-const VIEW_H = 231;      // internal canvas height (art pixels)
+const FIELD_TOP = 37;    // internal px where the far sideline sits
+const VIEW_H = 196;      // internal canvas height (art pixels)
 const FIELD_XMIN = -26, FIELD_XMAX = 136;
 
 function mkCanvas(w, h) {
@@ -107,47 +107,51 @@ function makeKit(team, home) {
 }
 
 // ---- Player sprites ----------------------------------------------------------
-// 10x16 sprites. H helmet, h helmet stripe, S skin, F facemask, J jersey,
+// 12x19 sprites. H helmet, h helmet stripe, S skin, F facemask, J jersey,
 // N number/trim, P pants, L socks, B shoes.
 const SPR_SIDE = [
-  '...HHHH...',
-  '..HhhHHH..',
-  '..HHHHHSF.',
-  '..HHHHSSF.',
-  '...HHHSS..',
-  '....SS....',
-  '..JJJJJJ..',
-  '.JJJNNJJS.',
-  '.SJJNNJJ..',
-  '..JJJJJJ..',
-  '..JJJJJ...',
-  '..PPPPP...',
-  '..PPPPP...',
+  '....HHHH....',
+  '...HHhhHHH..',
+  '..HHHhhHHHH.',
+  '..HHHHHHSSF.',
+  '..HHHHHSSSF.',
+  '...HHHHSSF..',
+  '....HHSS....',
+  '...JJJJJJ...',
+  '..JJJJJJJJ..',
+  '.JJJJNNJJJS.',
+  '.SJJJNNJJJS.',
+  '..JJJNNJJ...',
+  '..JJJJJJJ...',
+  '..PPPPPPP...',
+  '..PPPPPPP...',
 ];
 const SPR_FRONT = [
-  '...HHHH...',
-  '..HHhhHH..',
-  '..HSSSSH..',
-  '..HFFFFH..',
-  '...SSSS...',
-  '..JJJJJJ..',
-  '.JJJJJJJJ.',
-  'SJJJNNJJJS',
-  'SJJJNNJJJS',
-  '.JJJJJJJJ.',
-  '..JJJJJJ..',
-  '..PPPPPP..',
-  '..PPPPPP..',
+  '....HHHH....',
+  '...HHhhHH...',
+  '..HHHhhHHH..',
+  '..HSSSSSSH..',
+  '..HFFFFFFH..',
+  '...SSSSSS...',
+  '....SSSS....',
+  '..JJJJJJJJ..',
+  '.JJJJJJJJJJ.',
+  'SJJJJNNJJJJS',
+  'SJJJJNNJJJJS',
+  'S.JJJNNJJJ.S',
+  '..JJJJJJJJ..',
+  '..PPPPPPPP..',
+  '..PPPPPPPP..',
 ];
 // people on the sideline: hair instead of a helmet, no facemask
 const SPR_CIV = SPR_FRONT.map(r => r.replace(/F/g, 'S'));
 const LEGS = {
-  stand: ['..PP.PP...', '..LL.LL...', '..BB.BB...'],
-  runA:  ['.PP...PP..', '.LL....LL.', 'BB.....BB.'],
-  runB:  ['...PPP....', '...LLL....', '...BBB....'],
-  front: ['..PP..PP..', '..LL..LL..', '..BB..BB..'],
+  stand: ['..PPP.PPP...', '..LL...LL...', '..LL...LL...', '..BBB..BBB..'],
+  runA:  ['.PPP...PPP..', '.LL.....LL..', 'LL.......LL.', 'BB.......BBB'],
+  runB:  ['...PPPPP....', '....LLL.....', '....LL......', '....BBBB....'],
+  front: ['..PPP..PPP..', '..LLL..LLL..', '..LLL..LLL..', '..BBB..BBB..'],
 };
-const SPR_W = 10, SPR_H = 16;
+const SPR_W = 12, SPR_H = 19;
 const spriteCache = new Map();
 
 function getSprite(kit, skin, pose, facing) {
@@ -183,13 +187,13 @@ function buildFieldStrip(home, away) {
   g.fillStyle = '#3e8a35'; g.fillRect(0, 0, W, VIEW_H);
 
   // Stands: a thin band of fans (the score bar covers the top of it)
-  g.fillStyle = '#3b3f47'; g.fillRect(0, 0, W, 19);
+  g.fillStyle = '#3b3f47'; g.fillRect(0, 0, W, 17);
   const fanColors = [home.c1, home.c1, home.c2, away.c1, '#d9d9d9', '#2f5fa8', home.c1, '#b33'];
   for (let col = 0; col < W / 3; col++) {
     for (let row = 0; row < 4; row++) {
       const r = hash2(col, row);
       if (r < 0.12) continue;
-      const px = col * 3 + (row & 1), py = 2 + row * 4;
+      const px = col * 3 + (row & 1), py = 1 + row * 4;
       g.fillStyle = fanColors[Math.floor(hash2(col + 999, row) * fanColors.length)];
       g.fillRect(px, py + 2, 2, 2);
       g.fillStyle = SKINS[Math.floor(r * 100) % SKINS.length];
@@ -197,14 +201,14 @@ function buildFieldStrip(home, away) {
     }
   }
   // Wall + ad boards
-  g.fillStyle = '#c9ccd1'; g.fillRect(0, 18, W, 4);
-  g.fillStyle = '#7d828a'; g.fillRect(0, 22, W, 1);
+  g.fillStyle = '#c9ccd1'; g.fillRect(0, 16, W, 3);
+  g.fillStyle = '#7d828a'; g.fillRect(0, 19, W, 1);
   for (let x = -20; x <= 130; x += 30) {
-    g.fillStyle = home.c1; g.fillRect(fx(x) - 22, 18, 44, 4);
-    drawText(g, home.id, fx(x) - Math.floor(textWidth(home.id, 1) / 2), 18, 1, lum(home.c1) > 0.6 ? '#222' : '#fff');
+    g.fillStyle = home.c1; g.fillRect(fx(x) - 22, 15, 44, 5);
+    drawText(g, home.id, fx(x) - Math.floor(textWidth(home.id, 1) / 2), 15, 1, lum(home.c1) > 0.6 ? '#222' : '#fff');
   }
   // Sideline strip
-  g.fillStyle = '#4a9440'; g.fillRect(0, 23, W, FIELD_TOP - 25);
+  g.fillStyle = '#4a9440'; g.fillRect(0, 20, W, FIELD_TOP - 22);
   for (let x = 0; x < W; x += 6) { g.fillStyle = '#e8d24a'; g.fillRect(x, FIELD_TOP - 4, 3, 1); g.fillRect(x, yBot + 6, 3, 1); }
 
   // Turf stripes every 5 yards, end zones a touch darker
@@ -215,7 +219,7 @@ function buildFieldStrip(home, away) {
   }
   // Turf texture
   for (let i = 0; i < W * 0.9; i++) {
-    const px = Math.floor(hash2(i, 7) * W), py = 23 + Math.floor(hash2(i, 13) * (VIEW_H - 23));
+    const px = Math.floor(hash2(i, 7) * W), py = 20 + Math.floor(hash2(i, 13) * (VIEW_H - 20));
     g.fillStyle = hash2(i, 3) < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.07)';
     g.fillRect(px, py, 1, 1);
   }
@@ -269,13 +273,13 @@ function buildFieldStrip(home, away) {
   // Midfield circle
   const mid = textCanvas(home.id, 4, '#f4f4f4', home.c1);
   g.fillStyle = shade(home.c1, -0.1);
-  g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), 34, 22, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), 30, 17, 0, 0, Math.PI * 2); g.fill();
   g.fillStyle = LINE; g.fillRect(fx(50), FIELD_TOP, 1, yBot - FIELD_TOP);
   blitRot(g, mid, fx(50) + 1, fy(FIELD_W / 2), 0);
 
   // End zone names, reading along the end line
   const ezText = home.mascot.toUpperCase();
-  const ez = textCanvas(ezText, ezText.length > 9 ? 3 : 4, home.c1, '#f4f4f4');
+  const ez = textCanvas(ezText, clamp(Math.floor((FIELD_W * SY - 8) / (ezText.length * 4)), 2, 4), home.c1, '#f4f4f4');
   blitRot(g, ez, fx(-5), fy(FIELD_W / 2), 3);
   blitRot(g, ez, fx(105), fy(FIELD_W / 2), 1);
 
@@ -293,7 +297,7 @@ function buildFieldStrip(home, away) {
   g.fillStyle = '#f07c1a';
   for (const x of [24, 47, 53, 76]) g.fillRect(fx(x), FIELD_TOP - 11, 4, 6);
   const hk = makeKit(home, true), ak = makeKit(away, false);
-  const feet = FIELD_TOP - 5;
+  const feet = FIELD_TOP - 3;
   for (let x = 22; x <= 78; x += 1.3) {
     if (Math.abs(x - 50) < 2.5) continue;
     const kit = x < 50 ? hk : ak, k = Math.round(x * 10);
