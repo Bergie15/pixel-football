@@ -1,0 +1,59 @@
+# Border Bowl
+
+A Retro Bowl–style pixel football game for the browser, built for phones held sideways. Every school in the **MIAC** (Minnesota) and **WIAC** (Wisconsin) is playable.
+
+No build step and no dependencies: open `index.html`, or serve the folder with any static host (GitHub Pages works).
+
+```sh
+npx serve .          # or: python3 -m http.server
+```
+
+## How to play
+
+- **Call a play.** Six pass concepts (Four Verts, Slants, Mesh, Curl Flat, Smash, PA Post) and two runs (HB Dive, HB Toss). On 4th down you can also punt or kick a field goal.
+- **Snap.** Tap the field.
+- **Throw.** Touch anywhere and pull back like a slingshot. A dotted arc shows where the ball lands, and you let go to throw. The dot over each receiver turns green when he's open. If you'd rather point at the spot, switch the aim style in Settings.
+- **Run.** After a catch or handoff, drag to steer and tap to juke. Hit **RUN** to scramble with the quarterback.
+- **Kick.** Tap when the needle is in the green.
+
+You play offense. Each opponent drive is simulated from your defense rating against their offense, and the result shows on a scorecard.
+
+Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runner, and the mouse throws.
+
+## Season mode
+
+- A 9-week schedule built from a conference round robin. Every week the MIAC and WIAC bye teams meet in a cross-border game.
+- The top two teams in each conference play a title game, and the two champions meet in the **Border Bowl**.
+- Wins earn coach points. Spend them to raise player attributes (arm, accuracy, speed, power, hands, leg) and your O-line and defense units.
+- Seniors graduate, freshmen arrive, and returning players develop between seasons.
+- Progress saves to `localStorage`.
+
+## Teams
+
+| MIAC (Minnesota) | WIAC (Wisconsin) |
+|---|---|
+| Augsburg Auggies | UW-Eau Claire Blugolds |
+| Bethel Royals | UW-La Crosse Eagles |
+| Carleton Knights | UW-Oshkosh Titans |
+| Concordia-Moorhead Cobbers | UW-Platteville Pioneers |
+| Gustavus Adolphus Golden Gusties | UW-River Falls Falcons |
+| Hamline Pipers | UW-Stevens Point Pointers |
+| Macalester Scots | UW-Stout Blue Devils |
+| Saint John's Johnnies | UW-Superior Yellowjackets |
+| Saint Mary's Cardinals | UW-Whitewater Warhawks |
+| St. Olaf Oles | |
+| St. Scholastica Saints | |
+
+Saint Mary's and UW-Superior don't field football teams in real life, but they're included so every co-ed conference member is playable. Team ratings are rough estimates. Schools appear only by name and colors, with no logos.
+
+## Code layout
+
+| File | What it does |
+|---|---|
+| `js/data.js` | Teams, routes, playbook, 3×5 pixel font |
+| `js/render.js` | Sprites, stadium and field rendering |
+| `js/engine.js` | Live play simulation: routes, blocking, coverage, pursuit, catches, tackles; opponent drive sim |
+| `js/match.js` | Game flow: downs, clock, kicks, conversions, halftime, overtime |
+| `js/league.js` | Schedule, standings, sim games, roster, offseason, saves |
+| `js/ui.js` | Menus, HUD, touch input, sound, main loop |
+| `tools/bundle.js` | Inlines everything into one HTML file |

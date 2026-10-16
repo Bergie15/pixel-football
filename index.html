@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#0b0d0a">
+<title>Border Bowl</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--BODY-->
+<canvas id="cv"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-score"><span id="hAway"></span><span id="hHome"></span></div>
+  <div id="hClock"></div>
+  <button id="btnPause" aria-label="Pause">II</button>
+</div>
+<div id="chip" hidden></div>
+<div id="tapHint" class="box" hidden>TAP TO SNAP</div>
+<button id="btnScramble" class="btn" hidden>RUN</button>
+
+<div id="sheet" hidden></div>
+<div id="banner" class="overlay" hidden><div class="box"><div id="bTitle"></div><div id="bSub"></div></div></div>
+<div id="card" class="overlay" hidden></div>
+<div id="meter" class="overlay" hidden></div>
+<div id="screen" hidden></div>
+<div id="rotate" hidden><div class="phone"></div><p>TURN YOUR PHONE SIDEWAYS</p></div>
+
+<script src="js/data.js"></script>
+<script src="js/render.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/league.js"></script>
+<script src="js/match.js"></script>
+<script src="js/ui.js"></script>
+<!--/BODY-->
+</body>
+</html>
