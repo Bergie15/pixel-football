@@ -33,7 +33,7 @@ Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runn
 
 ## Live Game
 
-**LIVE GAME** on the main menu acts out a real game's play-by-play on the pixel field. You get the score, clock, down and distance, with each run, pass, sack, interception, punt, field goal and kickoff animated, and the play text in a ticker. It reads the standard college play-by-play format that Saint John's and UW-River Falls live stats pages use, for example `1st and 10 at SJU25 J. Smith rush for 5 yards to the SJU30`.
+**LIVE GAME** on the main menu acts out a real game's play-by-play on the pixel field. You get the score, clock, down and distance, with each run, pass, sack, interception, punt, field goal and kickoff animated. A ticker shows just the result, with no player names: `SJU RUN +5 YDS`, `UWRF PASS COMPLETE +12 YDS · 1ST DOWN`, `PUNT 41 YDS`, `PENALTY ON SJU · 5 YDS`, `PLAY UNDER REVIEW`. It reads the standard college play-by-play format that Saint John's and UW-River Falls live stats pages use, for example `1st and 10 at SJU25 J. Smith rush for 5 yards to the SJU30`.
 
 Plays can come from three places:
 

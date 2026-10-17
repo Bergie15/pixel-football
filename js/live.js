@@ -120,7 +120,7 @@ const Live = (() => {
 
   // ---- parsing -----------------------------------------------------------------
   const ORDW = { '1st': 1, '2nd': 2, '3rd': 3, '4th': 4 };
-  const PLAY_RE = /(kickoff|punt|rush|pass|sacked|field goal|kick attempt|penalty|fumble|timeout|end of|start of|quarter|touchback|kneel|two-point|2-point|conversion)/i;
+  const PLAY_RE = /(kickoff|punt|rush|pass|sacked|field goal|kick attempt|penalty|fumble|timeout|end of|start of|quarter|touchback|kneel|two-point|2-point|conversion|review|replay|ruling|overturned)/i;
 
   // Turn pasted text or a fetched HTML page into candidate play lines.
   function toLines(text) {
@@ -242,7 +242,11 @@ const Live = (() => {
       ev.td = /touchdown/i.test(L);
       ev.noPlay = /no play/i.test(L);
       const yds = (re) => { const m = line.match(re); return m ? +m[1] : null; };
-      if (/kickoff/i.test(L)) ev.kind = 'kickoff';
+      if (/under review|being reviewed|replay review|ruling on the field|overturned|call (?:stands|confirmed|upheld)/i.test(L) && !/\d+\s+yards?/i.test(L)) {
+        ev.kind = 'review';
+        ev.reviewResult = /overturned|reversed/i.test(L) ? 'OVERTURNED' : /stands|confirmed|upheld/i.test(L) ? 'CALL STANDS' : '';
+      }
+      else if (/kickoff/i.test(L)) ev.kind = 'kickoff';
       else if (/\bpunt\b/i.test(L)) ev.kind = 'punt';
       else if (/field goal/i.test(L)) { ev.kind = 'fg'; ev.good = /\bgood\b/i.test(L) && !/no good/i.test(L); ev.dist = yds(/from\s+(\d+)/i); }
       else if (/kick attempt|pat\b|extra point/i.test(L)) { ev.kind = 'pat'; ev.good = /good/i.test(L) && !/no good|failed|blocked/i.test(L); }
@@ -346,6 +350,43 @@ const Live = (() => {
       return anim;
     }
 
+    // Short result for the ticker: no names, just what happened.
+    summary(anim) {
+      const ev = anim.ev, team = s => (s === 'H' ? this.homeT : this.awayT).id;
+      const yd = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n);
+      const gained = anim.endA !== undefined ? Math.round((anim.endA - anim.startA) * (anim.off === 'H' ? 1 : -1)) : 0;
+      const tail = [];
+      if (ev.td) tail.push('TOUCHDOWN');
+      else if (ev.firstDownSide) tail.push('1ST DOWN');
+      if (ev.fumble) tail.push(ev.recoverSide && ev.recoverSide !== anim.off ? 'FUMBLE · TURNOVER' : 'FUMBLE · RECOVERED');
+      if (/penalty/i.test(ev.line) && ev.kind !== 'penalty') tail.push('FLAG');
+      const t = team(anim.off);
+      let main;
+      switch (ev.kind) {
+        case 'run': main = gained === 0 ? `${t} RUN · NO GAIN` : `${t} RUN ${yd(gained)} YDS`; break;
+        case 'pass': main = `${t} PASS COMPLETE ${yd(gained)} YDS`; break;
+        case 'inc': main = `${t} PASS INCOMPLETE`; break;
+        case 'sack': main = `${t} QB SACKED ${yd(gained)} YDS`; break;
+        case 'int': main = `INTERCEPTION · ${team(anim.off === 'H' ? 'A' : 'H')} BALL`; break;
+        case 'punt': main = `${t} PUNT${ev.kickYds ? ' ' + ev.kickYds + ' YDS' : ''}${ev.touchback ? ' · TOUCHBACK' : / fair catch/i.test(ev.line) ? ' · FAIR CATCH' : ''}`; break;
+        case 'kickoff': main = `KICKOFF${ev.touchback ? ' · TOUCHBACK' : ` · RETURNED TO THE ${ballOn(this.frame(anim.recv, anim.endA)).replace('OWN ', '').replace('OPP ', 'OPP ')}`}`; break;
+        case 'fg': main = `${t} ${ev.dist ? ev.dist + '-YD ' : ''}FIELD GOAL ${ev.good ? 'GOOD' : /blocked/i.test(ev.line) ? 'BLOCKED' : 'NO GOOD'}`; break;
+        case 'pat': main = `${t} EXTRA POINT ${ev.good ? 'GOOD' : 'NO GOOD'}`; break;
+        case 'two': main = `${t} TWO-POINT TRY ${ev.good ? 'GOOD' : 'NO GOOD'}`; break;
+        case 'penalty': {
+          const y = ev.line.match(/(\d+)\s+yards?/i);
+          const on = ev.line.match(/penalty\s+([A-Za-z]{1,6})\b/i);
+          main = `PENALTY${on ? ' ON ' + team(this.sideOf(on[1])) : ''}${y ? ' · ' + y[1] + ' YDS' : ''}${ev.noPlay ? ' · NO PLAY' : ''}`;
+          break;
+        }
+        case 'review': main = ev.reviewResult ? `REVIEW · ${ev.reviewResult}` : 'PLAY UNDER REVIEW'; break;
+        case 'timeout': { const m = ev.line.match(/timeout\s+([A-Za-z]{1,6})/i); main = `TIMEOUT${m && /^[A-Z]+$/.test(m[1]) ? ' · ' + team(this.sideOf(m[1])) : ''}`; break; }
+        default:
+          main = ev.quarterMark ? `${ev.quarterMark.end ? 'END' : 'START'} OF ${ORD[ev.quarterMark.q].toUpperCase()} QUARTER` : ev.final ? 'FINAL' : '';
+      }
+      return [main, ...tail].filter(Boolean).join(' · ') || '…';
+    }
+
     // ---- UI.hudUpdate support ----
     situation() {
       const x = this.frame(this.poss || 'H', this.ballA);
@@ -369,7 +410,7 @@ const Live = (() => {
       const before = { u: this.score.u, o: this.score.o };
       const anim = this.apply(ev);
       this.current = ev;
-      this.ticker(ev.line);
+      this.ticker(this.summary(anim));
       this.animate(anim, () => {
         UI.hudUpdate(this);
         const scored = this.score.u !== before.u || this.score.o !== before.o;
@@ -381,6 +422,8 @@ const Live = (() => {
           return UI.banner(pts >= 6 ? 'TOUCHDOWN!' : pts === 3 ? 'FIELD GOAL' : pts === 2 && ev.kind !== 'two' ? 'SAFETY' : pts === 1 ? 'EXTRA POINT' : 'TWO-POINT GOOD!', who.mascot, done, pts >= 6 ? 'td' : 'good');
         }
         if (ev.kind === 'int') return UI.banner('INTERCEPTED!', '', done, 'bad');
+        if (ev.kind === 'review') return UI.banner(ev.reviewResult || 'UNDER REVIEW', ev.reviewResult ? 'After review' : 'The play is being reviewed', done);
+        if (ev.kind === 'penalty') return UI.banner('FLAG ON THE PLAY', this.summary(anim).split(' · ').slice(1).join(' · '), done, 'bad');
         if (ev.fumble && ev.recoverSide) return UI.banner('FUMBLE!', '', done, 'bad');
         if (ev.quarterMark && ev.quarterMark.end) return UI.banner(`END OF ${ORD[ev.quarterMark.q].toUpperCase()} QUARTER`, '', done);
         done();
