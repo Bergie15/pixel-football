@@ -159,43 +159,73 @@ class Play {
     }
   }
 
+  // Aim assist: if the aim point is near a receiver, move it to where that
+  // receiver will be when the ball arrives (two passes of lead prediction).
+  assistAim(tx, ty) {
+    const q = this.qb, P = this.roster.QB;
+    const speed = 19 + 3.2 * P.arm, maxD = 34 + 6 * P.arm;
+    let best = null, bd = 6.5;
+    for (const r of this.receivers) {
+      if (r.block) continue;
+      const dur = 0.22 + Math.hypot(r.x - q.x, r.y - q.y) / speed;
+      const dd = Math.hypot(r.x + r.vx * dur - tx, r.y + r.vy * dur - ty);
+      if (dd < bd) { bd = dd; best = r; }
+    }
+    let x = tx, y = ty;
+    if (best) {
+      let lx = best.x, ly = best.y;
+      for (let i = 0; i < 3; i++) {
+        const dur = 0.22 + Math.hypot(lx - q.x, ly - q.y) / speed;
+        lx = best.x + best.vx * dur * 0.7; ly = best.y + best.vy * dur * 0.7;
+      }
+      ly = clamp(ly, 0.8, FIELD_W - 0.8);
+      const pull = clamp(1 - bd / 6.5, 0, 1) * 0.35 + 0.65;  // strong snap, still nudgeable
+      x = lerp(tx, lx, pull); y = lerp(ty, ly, pull);
+    }
+    const d = Math.hypot(x - q.x, y - q.y);
+    if (d > maxD) { x = q.x + (x - q.x) / d * maxD; y = q.y + (y - q.y) / d * maxD; }
+    return { x, y, r: best };
+  }
+
   throwTo(tx, ty) {
     if (!this.canThrow()) return false;
     const q = this.qb, P = this.roster.QB;
-    let dx = tx - q.x, dy = ty - q.y, d = Math.hypot(dx, dy);
+    const aim = this.assistAim(tx, ty);
+    tx = aim.x; ty = aim.y;
+    const d = Math.hypot(tx - q.x, ty - q.y);
     if (d < 2) return false;
-    const maxD = 34 + 6 * P.arm;
-    if (d > maxD) { tx = q.x + dx / d * maxD; ty = q.y + dy / d * maxD; d = maxD; }
     let pressure = 0;
     for (const e of this.def) {
       if (e.blockedBy || this.t < e.stunUntil) continue;
       const dd = dist(e, q);
       if (dd < 3) pressure = Math.max(pressure, (3 - dd) / 3);
     }
-    const sigma = 0.2 + d * (0.048 - 0.008 * P.acc) + pressure * 1.6;
-    tx += gauss() * sigma; ty += gauss() * sigma * 0.8;
+    // small scatter: better QBs, short throws and a clean pocket are tighter
+    const sigma = 0.08 + d * (0.02 - 0.003 * P.acc) + pressure * 0.8;
+    tx += gauss() * sigma; ty += gauss() * sigma * 0.7;
     const speed = 19 + 3.2 * P.arm;
     const dur = 0.22 + d / speed;
     this.ball = { x: q.x, y: q.y, h: 1.8, fx: q.x, fy: q.y, tx, ty, t0: this.t, dur, peak: 0.8 + d * 0.13, holder: null, air: true };
     q.hasBall = false;
     this.phase = 'air';
     this.throwDist = d;
-    // Intended receiver tracks the ball
-    let best = null, bd = 9;
-    for (const r of this.receivers) {
-      if (r.block) continue;
-      const px = r.x + r.vx * dur * 0.7, py = r.y + r.vy * dur * 0.7;
-      const dd = Math.hypot(px - tx, py - ty);
-      if (dd < bd) { bd = dd; best = r; }
+    // The intended receiver goes for the ball
+    let best = aim.r;
+    if (!best) {
+      let bd = 9;
+      for (const r of this.receivers) {
+        if (r.block) continue;
+        const dd = Math.hypot(r.x + r.vx * dur * 0.7 - tx, r.y + r.vy * dur * 0.7 - ty);
+        if (dd < bd) { bd = dd; best = r; }
+      }
     }
     if (best) best.track = true;
     // Defenders who can get there react after a beat
     for (const e of this.def) {
       if (e.kind === 'DL') continue;
       const dd = Math.hypot(e.x - tx, e.y - ty);
-      if (dd < e.maxSp * dur + 3 && dd < 13) { e.ballReact = true; e.reactAt = this.t + 0.22 + rnd() * 0.25 - 0.03 * this.dr; }
+      if (dd < e.maxSp * dur + 3 && dd < 12) { e.ballReact = true; e.reactAt = this.t + 0.3 + rnd() * 0.25 - 0.03 * this.dr; }
     }
-    this.stats = { att: 1 };
     this.events.push('throw');
     return true;
   }
@@ -511,11 +541,18 @@ class Play {
     b.h = 1.8 * (1 - uu) + 4 * b.peak * uu * (1 - uu);
     if (u < 0.72 || (u < 1 && b.h > 2.3)) return;
     // Receivers can reach a bit higher than a defender jumping into the lane.
-    const rR = u >= 1 ? 1.45 : 1.0, dR = u >= 1 ? 1.2 : (b.h < 1.2 ? 0.6 : 0);
+    const rR = u >= 1 ? 1.9 : 1.3, dR = u >= 1 ? 1.0 : (b.h < 1.2 ? 0.55 : 0);
     let r = null, rd = rR, dfd = null, ddd = dR;
     for (const e of this.receivers) { if (e.block && !e.track) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < rd) { rd = k; r = e; } }
     for (const e of this.def) { if (e.blockedBy) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < ddd) { ddd = k; dfd = e; } }
-    if (!r && !dfd) { if (u >= 1) this.endPlay('inc', 'INCOMPLETE'); return; }
+    if (!r && !dfd && u >= 1) {
+      // just out of reach: the receiver lays out for it
+      let dv = null, dvd = 3.2;
+      for (const e of this.receivers) { if (e.block && !e.track) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < dvd) { dvd = k; dv = e; } }
+      if (dv) return this.divingCatch(dv, dvd);
+      return this.endPlay('inc', 'INCOMPLETE');
+    }
+    if (!r && !dfd) return;
     this.resolveCatch(r, rd, dfd, ddd);
   }
 
@@ -526,7 +563,7 @@ class Play {
       let contest = 0;
       for (const e of this.def) if (!e.blockedBy && dist(e, r) < 1.5) contest += 1 - dist(e, r) / 1.5;
       const hands = (r.player && r.player.hnd) || 3;
-      const p = 0.93 + 0.04 * (hands - 3) - 0.15 * (rd / 1.6) - contest * 0.38 * (1 + 0.1 * (this.dr - 3));
+      const p = 0.97 + 0.03 * (hands - 3) - 0.08 * (rd / 1.9) - contest * 0.3 * (1 + 0.1 * (this.dr - 3));
       if (rnd() < p) {
         if (oob) return this.endPlay('inc', 'OUT OF BOUNDS');
         r.x = b.x * 0.5 + r.x * 0.5; r.y = b.y * 0.5 + r.y * 0.5;
@@ -539,9 +576,25 @@ class Play {
       if (d && dd < 1.0 && rnd() < 0.12) return this.intercept(d);
       return this.endPlay('inc', contest > 0.2 ? 'BROKEN UP' : 'DROPPED');
     }
-    const pInt = 0.2 + 0.05 * (this.dr - 3) - (r ? 0.08 : 0);
+    const pInt = 0.16 + 0.05 * (this.dr - 3) - (r ? 0.08 : 0);
     if (!oob && rnd() < pInt) return this.intercept(d);
     this.endPlay('inc', 'BROKEN UP');
+  }
+
+  // A dive: the receiver ends up on the ground at the spot, with the ball or not.
+  divingCatch(r, k) {
+    const b = this.ball;
+    let contest = 0;
+    for (const e of this.def) if (!e.blockedBy && dist(e, b) < 1.6) contest += 1 - dist(e, b) / 1.6;
+    const hands = (r.player && r.player.hnd) || 3;
+    const p = 0.82 + 0.05 * (hands - 3) - (k - 1.9) * 0.15 - contest * 0.35;
+    r.x = b.x; r.y = clamp(b.y, -0.5, FIELD_W + 0.5); r.vx *= 0.3; r.vy *= 0.3; r.down = true;
+    if (b.y < 0 || b.y > FIELD_W || b.x > 110 || rnd() > p) return this.endPlay('inc', 'INCOMPLETE');
+    this.catcher = r;
+    this.carrier = r; r.hasBall = true; b.air = false; b.holder = r;
+    this.events.push('catch');
+    if (r.x >= 100) return this.endPlay('td', 'TOUCHDOWN!');
+    this.endPlay('tackle', 'DIVING CATCH!', clamp(r.x, 0.5, 99.5));
   }
 
   intercept(d) {
@@ -720,12 +773,10 @@ class Play {
   }
 
   drawAim(ctx, sx, sy) {
-    const q = this.qb, a = this.aim;
-    const d = Math.hypot(a.x - q.x, a.y - q.y);
-    const maxD = 34 + 6 * this.roster.QB.arm;
-    const k = d > maxD ? maxD / d : 1;
-    const tx = q.x + (a.x - q.x) * k, ty = q.y + (a.y - q.y) * k;
-    const peak = 0.8 + Math.min(d, maxD) * 0.13;
+    const q = this.qb;
+    const a = this.assistAim(this.aim.x, this.aim.y);
+    const tx = a.x, ty = a.y;
+    const peak = 0.8 + Math.hypot(tx - q.x, ty - q.y) * 0.13;
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     for (let i = 1; i < 20; i++) {
       const u = i / 20;
@@ -736,14 +787,8 @@ class Play {
     const cx = sx(tx), cy = sy(ty);
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillRect(cx - 2, cy - 1, 4, 2); ctx.fillRect(cx - 1, cy - 1.5, 2, 3);
-    // highlight the receiver the throw is headed for
-    let best = null, bd = 5;
-    for (const r of this.receivers) {
-      if (r.block) continue;
-      const dd = Math.hypot(r.x - tx, r.y - ty);
-      if (dd < bd) { bd = dd; best = r; }
-    }
-    return best;
+    // the receiver the throw is locked onto gets a ring
+    return a.r;
   }
 }
 

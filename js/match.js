@@ -171,9 +171,12 @@ class Match {
     else if (r.type === 'sack') { label = 'SACKED'; sub = `Loss of ${Math.abs(yds)}`; tone = 'bad'; }
     else { label = yds > 0 ? `GAIN OF ${yds}` : yds === 0 ? 'NO GAIN' : `LOSS OF ${-yds}`; sub = who; }
 
+    const dive = r.label === 'DIVING CATCH!';
+    if (dive) { sub = `${label} · ${who}`; label = 'DIVING CATCH!'; tone = 'good'; }
     if (newLos >= this.fd) {
       this.los = newLos; this.down = 1; this.fd = Math.min(this.los + 10, 100);
-      label = 'FIRST DOWN!'; tone = 'good'; sub = (yds > 0 ? `+${yds} · ` : '') + who;
+      sub = (dive ? 'Diving catch · ' : '') + (yds > 0 ? `+${yds} · ` : '') + who;
+      label = 'FIRST DOWN!'; tone = 'good';
     } else {
       this.los = newLos; this.down++;
     }
