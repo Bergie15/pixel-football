@@ -33,6 +33,16 @@ Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runn
 
 ## Live Game
 
+Tap **LIVE GAME** and the Game Day screen shows Saint John's and UW-River Falls side by side:
+
+- **A game is on:** LIVE NOW with the score, a **WATCH** button that opens the pixel field, and a link to the school's live stats.
+- **Later today:** the kickoff time.
+- **Every day:** the next home game and the last game's score.
+
+Scores come from ESPN's public scoreboard feed (team IDs 2600 and 2723) when the page is allowed to load it, for example on GitHub Pages. ESPN's feed is unofficial and can change without notice. Otherwise the screen uses the built-in 2026 schedule in `js/live.js` (`GD_TEAMS`), with results through Oct 17, 2026. Add new scores there to keep that copy current.
+
+**MORE OPTIONS** on that screen opens the play-by-play viewer described below.
+
 **LIVE GAME** on the main menu acts out a real game's play-by-play on the pixel field. You get the score, clock, down and distance, with each run, pass, sack, interception, punt, field goal and kickoff animated. A ticker shows just the result, with no player names: `SJU RUN +5 YDS`, `UWRF PASS COMPLETE +12 YDS · 1ST DOWN`, `PUNT 41 YDS`, `PENALTY ON SJU · 5 YDS`, `PLAY UNDER REVIEW`. It reads the standard college play-by-play format that Saint John's and UW-River Falls live stats pages use, for example `1st and 10 at SJU25 J. Smith rush for 5 yards to the SJU30`.
 
 Plays can come from three places:

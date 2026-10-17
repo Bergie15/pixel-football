@@ -167,12 +167,13 @@ const Live = (() => {
       this.ticker();
       UI.hudUpdate(this);
       if (this.cfg.source === 'url' && !this.demo) this.poll();
+      if (this.cfg.source === 'espn') this.espnPoll();
       if (this.cfg.mode === 'latest' && !this.demo) this.fastForward();
       this.next();
     }
 
     onQuit() {
-      clearTimeout(this.pollT); this.quit = true;
+      clearTimeout(this.pollT); clearTimeout(this.espnT); this.quit = true;
       const t = $('liveTicker'); if (t) t.hidden = true;
     }
 
@@ -402,6 +403,7 @@ const Live = (() => {
       if (this.idx >= this.lines.length) {
         this.busy = false;
         this.status = this.demo ? 'DEMO · end of the demo quarter' : this.cfg.source === 'paste' ? 'Caught up · paste more plays to keep watching' : this.status;
+      if (this.cfg.source === 'espn') UI.hudUpdate(this);
         this.ticker();
         return;
       }
@@ -531,7 +533,7 @@ const Live = (() => {
     }
   }
 
-  return { setup, LiveMatch, toLines };
+  return { setup, LiveMatch, toLines, sel: () => saved };
 })();
 
 // ---------------------------------------------------------------------------
@@ -641,3 +643,225 @@ class LiveKick extends KickoffPlay {
     if (c) c.y = clamp(c.y, 0.5, FIELD_W - 0.5);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Game Day: one tap shows the current game if there is one, otherwise the
+// next home game and the last result, for Saint John's and UW-River Falls.
+// Scores come from ESPN's public scoreboard feed where the page may load it;
+// otherwise from the built-in schedule below (results as of Oct 17, 2026).
+// ---------------------------------------------------------------------------
+const GD_AS_OF = 'Oct 17, 2026';
+const GD_TEAMS = {
+  SJU: {
+    espn: 2600, stats: 'https://gojohnnies.com/sidearmstats/football/summary', site: 'https://gojohnnies.com/sports/football/schedule',
+    games: [
+      ['2026-09-05T13:00:00-05:00', true, 'UW-La Crosse', 24, 21],
+      ['2026-09-19T13:00:00-05:00', true, 'Hamline', 77, 0],
+      ['2026-09-26T13:00:00-05:00', false, 'Augsburg', 72, 0],
+      ['2026-10-03T13:00:00-05:00', true, 'Bethel', 42, 16],
+      ['2026-10-10T13:00:00-05:00', false, 'Macalester', 62, 6],
+      ['2026-10-17T13:00:00-05:00', true, 'Concordia-Moorhead'],
+      ['2026-10-24T13:00:00-05:00', false, 'Carleton'],
+      ['2026-10-31T13:00:00-05:00', true, 'Gustavus Adolphus'],
+      ['2026-11-07T13:00:00-06:00', false, 'St. Scholastica'],
+      ['2026-11-14T13:00:00-06:00', false, 'St. Olaf'],
+    ],
+  },
+  UWRF: {
+    espn: 2723, stats: 'https://uwrfsports.com/sidearmstats/football/summary', site: 'https://uwrfsports.com/sports/football/schedule',
+    games: [
+      ['2026-09-03T18:00:00-05:00', true, 'Southern Virginia', 73, 7],
+      ['2026-09-12T13:00:00-05:00', false, 'Coe', 38, 6],
+      ['2026-09-19T13:00:00-05:00', false, 'Wartburg', 31, 14],
+      ['2026-10-03T13:00:00-05:00', null, 'UW-Whitewater', 16, 24],
+      ['2026-10-10T13:00:00-05:00', true, 'UW-Oshkosh', 34, 31, 'OT'],
+      ['2026-10-17T13:00:00-05:00', false, 'UW-Platteville'],
+      ['2026-10-24T14:00:00-05:00', true, 'UW-Eau Claire'],
+      ['2026-10-31T14:05:00-05:00', true, 'UW-Stout'],
+      ['2026-11-07T14:00:00-06:00', false, 'UW-La Crosse'],
+      ['2026-11-14T14:00:00-06:00', true, 'UW-Stevens Point'],
+    ],
+  },
+};
+const GD_WINDOW = 3.6 * 3600 * 1000;  // a D-III game runs about three and a half hours
+const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/football/college-football';
+
+const GameDay = (() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => UI.esc(s);
+  let timer = 0, data = {}, source = 'built-in', updated = null;
+
+  const fmtDay = d => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const fmtTime = d => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const findTeam = name => {
+    if (!name) return null;
+    const n = name.toLowerCase();
+    return TEAMS.find(t => n.includes(t.mascot.toLowerCase().replace('golden ', '')) || n.includes(t.name.toLowerCase())) || null;
+  };
+
+  // built-in schedule → common shape
+  function builtIn(id) {
+    return GD_TEAMS[id].games.map(([iso, home, opp, us, them, note]) => ({
+      date: new Date(iso), home, opp, oppTeam: findTeam(opp),
+      us: us === undefined ? null : us, them: them === undefined ? null : them, note: note || '',
+      state: us !== undefined ? 'post' : 'pre',
+    }));
+  }
+
+  // ESPN team schedule → common shape (null if it can't be loaded here)
+  async function espnSchedule(id) {
+    const res = await fetch(`${ESPN}/teams/${GD_TEAMS[id].espn}/schedule`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    return (j.events || []).map(ev => {
+      const c = (ev.competitions || [])[0] || {};
+      const me = (c.competitors || []).find(x => String(x.id || (x.team && x.team.id)) === String(GD_TEAMS[id].espn)) || {};
+      const op = (c.competitors || []).find(x => x !== me) || {};
+      const sc = x => x && x.score !== undefined ? +(x.score.displayValue !== undefined ? x.score.displayValue : x.score) : null;
+      const st = (c.status || ev.status || {}).type || {};
+      return {
+        date: new Date(ev.date), home: me.homeAway ? me.homeAway === 'home' : null, eventId: ev.id,
+        opp: (op.team && (op.team.location || op.team.displayName)) || 'TBA', oppEspn: op.team || null,
+        oppTeam: findTeam(op.team && (op.team.displayName || op.team.name)),
+        us: st.state === 'pre' ? null : sc(me), them: st.state === 'pre' ? null : sc(op),
+        state: st.state || 'pre', detail: st.shortDetail || '', note: '',
+      };
+    });
+  }
+
+  async function refresh() {
+    let ok = 0;
+    for (const id of Object.keys(GD_TEAMS)) {
+      try { data[id] = await espnSchedule(id); ok++; } catch (e) { data[id] = builtIn(id); }
+    }
+    source = ok ? 'espn' : 'built-in';
+    updated = new Date();
+  }
+
+  // what to show for one team right now
+  function status(id) {
+    const games = (data[id] || builtIn(id)).slice().sort((a, b) => a.date - b.date);
+    const now = Date.now();
+    const live = games.find(g => g.state === 'in') ||
+      (source === 'built-in' ? games.find(g => g.state === 'pre' && now >= +g.date && now < +g.date + GD_WINDOW) : null);
+    const last = games.filter(g => g.state === 'post' && g.us !== null).pop() || null;
+    // a game that's over but whose score this copy doesn't have
+    const missed = games.filter(g => g.state === 'pre' && now >= +g.date + GD_WINDOW).pop() || null;
+    const today = games.find(g => g.state === 'pre' && +g.date > now && new Date(g.date).toDateString() === new Date().toDateString());
+    const nextHome = games.find(g => g.state === 'pre' && +g.date > now && g.home === true) || null;
+    const next = games.find(g => g.state === 'pre' && +g.date > now) || null;
+    return { live, last, today, nextHome, next, missed: missed && (!last || +missed.date > +last.date) ? missed : null };
+  }
+
+  const vs = g => (g.home === false ? 'at ' : 'vs ') + g.opp;
+  const result = g => {
+    if (g.us === null) return '';
+    const w = g.us > g.them ? 'W' : g.us < g.them ? 'L' : 'T';
+    return `<b class="${w === 'W' ? 'win' : w === 'L' ? 'loss' : ''}">${w} ${g.us}-${g.them}${g.note ? ' ' + esc(g.note) : ''}</b>`;
+  };
+
+  function teamCard(id) {
+    const t = TEAM_BY_ID[id], s = status(id), info = GD_TEAMS[id];
+    let main;
+    if (s.live) {
+      const scored = s.live.us !== null && s.live.us !== undefined;
+      main = `<div class="gd-live"><span class="gd-dot"></span>LIVE NOW${s.live.detail ? ' · ' + esc(s.live.detail) : ''}</div>
+        <div class="ptitle">${esc(vs(s.live))}</div>
+        ${scored ? `<div class="gd-score">${esc(t.id)} ${s.live.us} – ${s.live.them} ${esc(s.live.oppEspn ? s.live.oppEspn.abbreviation || '' : s.live.oppTeam ? s.live.oppTeam.id : '')}</div>`
+          : `<p class="dim">Kicked off at ${fmtTime(s.live.date)}. Live scores can't load on this copy of the game.</p>`}
+        <div class="row">${source === 'espn' ? `<button class="btn go" data-watch="${id}">WATCH</button>` : ''}<a class="btn" href="${info.stats}" target="_blank" rel="noopener">LIVE STATS ↗</a></div>`;
+    } else if (s.today) {
+      main = `<div class="gd-live gd-soon">GAME DAY · KICKOFF ${fmtTime(s.today.date)}</div>
+        <div class="ptitle">${esc(vs(s.today))}</div>
+        <div class="row"><a class="btn" href="${info.stats}" target="_blank" rel="noopener">LIVE STATS ↗</a></div>`;
+    } else {
+      main = `<div class="gd-live gd-off">NO GAME RIGHT NOW</div>`;
+    }
+    const nh = s.nextHome;
+    const lines = [
+      nh ? `<div class="gd-line"><span>NEXT HOME GAME</span><b>${fmtDay(nh.date)} · ${fmtTime(nh.date)}</b><em>vs ${esc(nh.opp)}</em></div>`
+        : `<div class="gd-line"><span>NEXT HOME GAME</span><b>None left this season</b>${s.next ? `<em>Next: ${fmtDay(s.next.date)} ${esc(vs(s.next))}</em>` : ''}</div>`,
+      s.missed ? `<div class="gd-line"><span>LAST GAME</span><b>${esc(vs(s.missed))}</b><em>${fmtDay(s.missed.date)} · score not loaded here · <a href="${info.site}" target="_blank" rel="noopener">see results ↗</a></em></div>`
+        : s.last ? `<div class="gd-line"><span>LAST GAME</span><b>${result(s.last)}</b><em>${esc(vs(s.last))} · ${fmtDay(s.last.date)}</em></div>` : '',
+    ];
+    return `<section class="box gd-card" style="--c1:${t.c1}">
+      <header>${UI.helmet(id)}<div><h3>${esc(t.name)}</h3><p class="dim">${esc(t.mascot)}</p></div></header>
+      ${main}${lines.join('')}</section>`;
+  }
+
+  function render() {
+    if (!$('screen') || $('screen').hidden || !document.querySelector('.gd-wrap')) { clearInterval(timer); return; }
+    document.querySelector('.gd-wrap').innerHTML = Object.keys(GD_TEAMS).map(teamCard).join('');
+    document.querySelector('.gd-src').textContent = source === 'espn'
+      ? `Scores from ESPN · updated ${fmtTime(updated)}`
+      : `Built-in schedule, results through ${GD_AS_OF}. Live scores load automatically when the game is hosted on its own site (see README).`;
+    document.querySelectorAll('[data-watch]').forEach(b => b.addEventListener('click', () => watch(b.dataset.watch)));
+  }
+
+  async function open() {
+    UI.show(`<h2>GAME DAY</h2>
+      <div class="gd-wrap"><p class="fine">Loading the latest scores…</p></div>
+      <p class="fine gd-src"></p>
+      <div class="menu"><button class="btn" id="gdMore">MORE OPTIONS<small>Paste plays, a live stats link, or the demo</small></button><button class="btn" data-act="title">BACK</button></div>`);
+    $('gdMore').addEventListener('click', () => { clearInterval(timer); UI.sfx('click'); Live.setup(); });
+    render();
+    await refresh();
+    render();
+    clearInterval(timer);
+    timer = setInterval(async () => { await refresh(); render(); }, 60000);
+  }
+
+  // Watch the live game on the field: ESPN score/clock, plus its last-play text when it has one.
+  function watch(id) {
+    clearInterval(timer);
+    const s = status(id), g = s.live;
+    if (!g) return;
+    const me = TEAM_BY_ID[id];
+    const opp = g.oppTeam || {
+      id: (g.oppEspn && g.oppEspn.abbreviation) || g.opp.slice(0, 4).toUpperCase(), name: g.opp, mascot: (g.oppEspn && g.oppEspn.name) || g.opp,
+      c1: g.oppEspn && g.oppEspn.color ? '#' + g.oppEspn.color : '#555b66', c2: g.oppEspn && g.oppEspn.alternateColor ? '#' + g.oppEspn.alternateColor : '#dddddd',
+    };
+    const home = g.home === false ? opp : me, away = home === me ? opp : me;
+    const lm = new Live.LiveMatch(home, away, { source: 'espn', mode: 'latest', espnTeam: GD_TEAMS[id].espn, eventId: g.eventId, meIsHome: home === me });
+    lm.status = 'LIVE · scores from ESPN';
+    UI.startLive(lm);
+  }
+
+  return { open, status, builtIn };
+})();
+
+// ESPN polling for a LiveMatch: score and clock from the scoreboard, and the
+// last play's text (when ESPN has it) fed through the play-by-play reader.
+Live.LiveMatch.prototype.espnPoll = async function () {
+  if (!this.alive()) return;
+  try {
+    const res = await fetch(`${ESPN}/summary?event=${this.cfg.eventId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const comp = j.header && j.header.competitions && j.header.competitions[0];
+    if (comp) {
+      const home = comp.competitors.find(c => c.homeAway === 'home'), away = comp.competitors.find(c => c.homeAway === 'away');
+      if (home && away) { this.score.u = +home.score || 0; this.score.o = +away.score || 0; }
+      const st = comp.status || {};
+      if (st.period) this.q = Math.min(4, st.period);
+      if (st.displayClock) { const [m, s] = st.displayClock.split(':').map(Number); if (!isNaN(m)) this.clock = m * 60 + (s || 0); }
+      if (st.type && st.type.state === 'post') this.status = 'FINAL · scores from ESPN';
+    }
+    // ESPN's play list, when the game has one
+    const plays = [];
+    for (const d of (j.drives && (j.drives.previous || []).concat(j.drives.current ? [j.drives.current] : [])) || []) {
+      for (const p of d.plays || []) if (p.text) plays.push((p.start && p.start.downDistanceText ? p.start.downDistanceText + ' ' : '') + p.text);
+    }
+    const sit = j.situation || (comp && comp.situation);
+    if (!plays.length && sit && sit.lastPlay && sit.lastPlay.text) plays.push(sit.lastPlay.text);
+    const before = this.lines.length;
+    if (plays.length) this.feed(plays.join('\n'));
+    if (this.lines.length > before && !this.busy) { this.fastForward(); this.next(); }
+    if (!plays.length) this.status = 'LIVE score from ESPN · no play-by-play for this game';
+  } catch (e) {
+    this.status = "Can't reach ESPN from here.";
+  }
+  UI.hudUpdate(this);
+  this.ticker();
+  this.espnT = setTimeout(() => this.espnPoll(), 20000);
+};
