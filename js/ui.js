@@ -430,6 +430,7 @@ const UI = (() => {
         ${league ? `<button class="btn go" data-act="hub">CONTINUE<small>${esc(TEAM_BY_ID[league.userId].name)} · Season ${league.season} · ${rec.w}-${rec.l}</small></button>` : ''}
         <button class="btn ${league ? '' : 'go'}" data-act="newSeason">NEW SEASON</button>
         <button class="btn" data-act="quick">QUICK GAME</button>
+        <button class="btn" data-act="live">LIVE GAME<small>Watch real play-by-play in pixels</small></button>
         <div class="row2">
           <button class="btn" data-act="howto">HOW TO PLAY</button>
           <button class="btn" data-act="settings">SETTINGS</button>
@@ -675,6 +676,18 @@ const UI = (() => {
     match.start();
   }
 
+  // Live play-by-play viewer (js/live.js) drives the same field, HUD and loop.
+  function startLive(lm) {
+    tryFullscreen();
+    hideScreen();
+    $('hud').hidden = false;
+    paused = false;
+    matchCtx = { kind: 'live' };
+    match = lm;
+    resize();
+    lm.start();
+  }
+
   function endMatch(m) {
     $('hud').hidden = true; $('chip').hidden = true; $('btnScramble').hidden = true; $('tapHint').hidden = true; $('ready').hidden = true;
     $('rotate').hidden = true;
@@ -725,6 +738,7 @@ const UI = (() => {
       hubTab = 'schedule';
       hub();
     }),
+    live: () => Live.setup(),
     quick: () => chooseTeam('YOUR TEAM', null, me => chooseTeam('OPPONENT', me, opp => {
       const ut = Object.assign({}, TEAM_BY_ID[me]), ot = Object.assign({}, TEAM_BY_ID[opp]);
       startMatch({ user: ut, opp: ot, userHome: true, roster: genRoster(ut), units: { ol: clamp(Math.round(ut.off), 1, 5), def: clamp(Math.round(ut.def), 1, 5) }, title: 'Exhibition' }, { kind: 'quick' });
@@ -780,6 +794,7 @@ const UI = (() => {
   };
 
   function quitMatch() {
+    if (match && match.onQuit) match.onQuit();
     paused = false; match = null;
     for (const id of ['hud', 'chip', 'tapHint', 'btnScramble', 'sheet', 'rotate', 'ready']) $(id).hidden = true;
     matchCtx && matchCtx.kind === 'season' ? hub() : title();
@@ -826,7 +841,7 @@ const UI = (() => {
     requestAnimationFrame(frame);
   }
 
-  return { init, card, banner, playSelect, presnap, ready, meter, hudUpdate, sfx, driveAnim, settings };
+  return { init, card, banner, playSelect, presnap, ready, meter, hudUpdate, sfx, driveAnim, settings, show, startLive, helmet, esc, title, currentMatch: () => match };
 })();
 
 window.addEventListener('DOMContentLoaded', UI.init);

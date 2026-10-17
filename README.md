@@ -31,6 +31,18 @@ Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runn
 - Seniors graduate and returning players develop between seasons. For each open spot you pick one of three recruits, and a better record draws better ones.
 - Progress saves to `localStorage`.
 
+## Live Game
+
+**LIVE GAME** on the main menu acts out a real game's play-by-play on the pixel field. You get the score, clock, down and distance, with each run, pass, sack, interception, punt, field goal and kickoff animated, and the play text in a ticker. It reads the standard college play-by-play format that Saint John's and UW-River Falls live stats pages use, for example `1st and 10 at SJU25 J. Smith rush for 5 yards to the SJU30`.
+
+Plays can come from three places:
+
+- **Live stats link.** The page checks the school's play-by-play page every 20 seconds. The defaults are `gojohnnies.com/sidearmstats/football/play-by-play` and `uwrfsports.com/sidearmstats/football/play-by-play`. Browsers only let a page read another site when that site allows it, so this needs the game hosted somewhere you control, such as GitHub Pages, plus the small relay in `tools/live-relay-worker.js`, a free Cloudflare Worker. The claude.ai link can't load other websites at all, so use Paste there.
+- **Paste plays.** Copy the play-by-play from the live stats page and paste it in. Tap **+ PLAYS** during the game to add newer plays. This works everywhere, including the claude.ai link on a phone.
+- **Demo game.** A made-up first quarter of Saint John's vs. UW-River Falls, labeled as a demo.
+
+**Jump to latest** catches up silently and starts with the most recent plays. **Replay from kickoff** animates every play.
+
 ## Teams
 
 | MIAC (Minnesota) | WIAC (Wisconsin) |
@@ -59,4 +71,6 @@ Saint Mary's and UW-Superior don't field football teams in real life, but they'r
 | `js/match.js` | Game flow: downs, clock, kicks, conversions, halftime, overtime |
 | `js/league.js` | Schedule, standings, sim games, roster, offseason, saves |
 | `js/ui.js` | Menus, HUD, touch input, sound, main loop |
+| `js/live.js` | Live Game: play-by-play parser and scripted replays |
+| `tools/live-relay-worker.js` | Optional relay so a hosted copy can read live stats pages |
 | `tools/bundle.js` | Inlines everything into one HTML file |

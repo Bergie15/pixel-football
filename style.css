@@ -233,3 +233,22 @@ h3 { font-family: var(--display); font-size: 12px; letter-spacing: 2px; margin: 
 .potg { margin-top: 10px; }
 .final p { font-size: 20px; margin: 8px 0 0; }
 .trophies p { color: var(--gold); }
+
+/* Live Game */
+.live-setup label { display: block; font-size: 18px; color: var(--chalk-dim); margin-top: 10px; }
+.live-setup select, .live-setup input, .live-setup textarea, .lv-more {
+  width: 100%; margin-top: 4px; font: inherit; font-size: 18px; color: #fff; background: #000; border: 2px solid #3a4036; border-radius: 6px; padding: 8px 10px;
+}
+.live-setup textarea, .lv-more { font-family: ui-monospace, 'Courier New', monospace; font-size: 14px; resize: vertical; user-select: text; -webkit-user-select: text; touch-action: auto; }
+.live-row { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; align-items: center; }
+.live-row label { margin-top: 8px; }
+.live-err { color: var(--flag); margin-top: 10px; }
+.lv-more { margin-top: 12px; min-height: 110px; }
+#liveTicker {
+  position: fixed; z-index: 6; left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center;
+  background: rgba(11,11,11,0.9); border-radius: 8px; box-shadow: inset 0 0 0 2px #2c2c2c; padding: 6px 12px; pointer-events: none;
+}
+#liveTicker .lt-play { font-size: 15px; line-height: 1.1; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+#liveTicker .lt-status { grid-column: 1; font-family: var(--display); font-size: 8px; letter-spacing: 1px; color: var(--gold); }
+#liveTicker .lt-add { grid-column: 2; grid-row: 1 / span 2; pointer-events: auto; font-family: var(--display); font-size: 10px; color: #fff; background: #000; border: 0; border-radius: 6px; box-shadow: inset 0 0 0 2px #6b6b6b; padding: 10px 12px; }
