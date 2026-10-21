@@ -429,9 +429,11 @@ const UI = (() => {
       <nav class="menu">
         ${league ? `<button class="btn go" data-act="hub">CONTINUE<small>${esc(TEAM_BY_ID[league.userId].name)} · Season ${league.season} · ${rec.w}-${rec.l}</small></button>` : ''}
         <button class="btn ${league ? '' : 'go'}" data-act="newSeason">NEW SEASON</button>
+        <button class="btn" data-act="national">D3 NATIONAL SEASON<small>All ${D3_TEAMS.length} schools · NCAA tournament</small></button>
         <button class="btn" data-act="quick">QUICK GAME</button>
         <button class="btn" data-act="live">LIVE GAME<small>Johnnies &amp; Falcons: live, next home game, last score</small></button>
         <div class="row2">
+          <button class="btn" data-act="playbook">PLAYBOOK</button>
           <button class="btn" data-act="howto">HOW TO PLAY</button>
           <button class="btn" data-act="settings">SETTINGS</button>
         </div>
@@ -694,6 +696,7 @@ const UI = (() => {
     match = null;
     const won = m.score.u > m.score.o;
     sfx(won ? 'td' : 'bad');
+    if (matchCtx.onEnd) return matchCtx.onEnd(m);
     if (matchCtx.kind === 'quick') return postgame(m, { label: 'FINAL', next: 'title' });
     const L = league, g = matchCtx.game;
     const home = g.h === L.userId;
@@ -739,6 +742,9 @@ const UI = (() => {
       hub();
     }),
     live: () => GameDay.open(),
+    national: () => National.open(),
+    nhub: () => National.hub(),
+    playbook: () => Playbook.open(),
     quick: () => chooseTeam('YOUR TEAM', null, me => chooseTeam('OPPONENT', me, opp => {
       const ut = Object.assign({}, TEAM_BY_ID[me]), ot = Object.assign({}, TEAM_BY_ID[opp]);
       startMatch({ user: ut, opp: ot, userHome: true, roster: genRoster(ut), units: { ol: clamp(Math.round(ut.off), 1, 5), def: clamp(Math.round(ut.def), 1, 5) }, title: 'Exhibition' }, { kind: 'quick' });
@@ -797,6 +803,7 @@ const UI = (() => {
     if (match && match.onQuit) match.onQuit();
     paused = false; match = null;
     for (const id of ['hud', 'chip', 'tapHint', 'btnScramble', 'sheet', 'rotate', 'ready']) $(id).hidden = true;
+    if (matchCtx && matchCtx.onQuit) return matchCtx.onQuit();
     matchCtx && matchCtx.kind === 'season' ? hub() : title();
   }
 
@@ -841,7 +848,7 @@ const UI = (() => {
     requestAnimationFrame(frame);
   }
 
-  return { init, card, banner, playSelect, presnap, ready, meter, hudUpdate, sfx, driveAnim, settings, show, startLive, helmet, esc, title, currentMatch: () => match };
+  return { init, card, banner, playSelect, presnap, ready, meter, hudUpdate, sfx, driveAnim, settings, show, startLive, helmet, esc, title, currentMatch: () => match, startMatch, postgame, pips };
 })();
 
 window.addEventListener('DOMContentLoaded', UI.init);

@@ -31,6 +31,29 @@ Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runn
 - Seniors graduate and returning players develop between seasons. For each open spot you pick one of three recruits, and a better record draws better ones.
 - Progress saves to `localStorage`.
 
+## D3 National Season
+
+Pick any of the 232 NCAA Division III football programs, searchable by name and filterable by conference. Every school is in its real 2026 conference, 27 in all. You get a random 10-game schedule built conference-first, with non-conference games filling the gaps, and every game you don't play is simulated.
+
+After week 10 comes the **NCAA tournament**:
+
+- 32 teams.
+- Every conference champion gets an automatic bid, except NESCAC, which skips the playoffs in real life too. The best remaining teams get at-large bids.
+- Seeds 1 through 32 are bracketed so the top seeds meet late, and the better seed hosts.
+- Five rounds end at the **Stagg Bowl**, a neutral-site game.
+
+Tabs show your schedule, any conference's standings, a Top 25, the live bracket and your roster. School colors and ratings are approximate. Saint Mary's and UW-Superior stay in the Border Bowl season only, because they don't field football teams.
+
+## Playbook
+
+**PLAYBOOK** on the main menu lets you draw your own pass plays, up to 8:
+
+1. Pick a player: WR, SLOT, TE, WR or RB.
+2. Tap the field to add route points, or drag to draw. Use **UNDO**, **CLEAR**, **BLOCK** to keep him in to block, or **SIT AT END** to settle like a curl.
+3. Name the play and save it.
+
+Saved plays appear in the play-call menu in every mode. They run through the same engine as the built-in routes.
+
 ## Live Game
 
 Tap **LIVE GAME** and the Game Day screen shows Saint John's and UW-River Falls side by side:
@@ -81,6 +104,9 @@ Saint Mary's and UW-Superior don't field football teams in real life, but they'r
 | `js/match.js` | Game flow: downs, clock, kicks, conversions, halftime, overtime |
 | `js/league.js` | Schedule, standings, sim games, roster, offseason, saves |
 | `js/ui.js` | Menus, HUD, touch input, sound, main loop |
+| `js/d3teams.js` | All Division III programs and conferences |
+| `js/national.js` | National Season: random schedules, standings, Top 25, NCAA bracket |
+| `js/playbook.js` | Play designer |
 | `js/live.js` | Live Game: play-by-play parser and scripted replays |
 | `tools/live-relay-worker.js` | Optional relay so a hosted copy can read live stats pages |
 | `tools/bundle.js` | Inlines everything into one HTML file |
