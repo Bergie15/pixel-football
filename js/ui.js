@@ -145,7 +145,7 @@ const UI = (() => {
       const pt = toInternal(e), held = performance.now() - stick.t0;
       const sdx = pt.x - stick.x0, sdy = pt.y - stick.y0, slen = Math.hypot(sdx, sdy) * stick.k;
       if (!stick.moved && held < 260) p.juke();
-      else if (held < 320 && slen > 24) p.cut(sdx / SX, sdy / SY);  // swipe = cut
+      else if (held < 450 && slen > 18) p.cut(sdx / SX, sdy / SY);  // swipe = cut
 
       stick = null; input.active = false; input.mag = 0;
     }

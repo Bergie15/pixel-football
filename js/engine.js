@@ -12,6 +12,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 const BASE_SPEED = { QB: 6.7, RB: 7.8, WR: 8.0, TE: 7.1, OL: 5.4, DL: 6.4, LB: 7.1, CB: 7.8, S: 7.6 };
 const TACKLE_R = 1.0;
+const CARRIER_LATERAL = 1.8;  // sideways speed boost for a runner you're steering
 let RQ = 1;  // render sub-pixel quantum, set by the UI to its canvas scale
 
 class Play {
@@ -151,10 +152,11 @@ class Play {
     this.userTook = true;
     if (dx < -0.2) dx = -0.2;  // a cut never turns the runner fully around
     const m = Math.hypot(dx, dy) || 1;
-    c.cutDx = dx / m; c.cutDy = dy / m; c.cutUntil = this.t + 0.55;
+    c.cutDx = dx / m; c.cutDy = dy / m; c.cutUntil = this.t + 0.9;
+    c.vy += c.cutDy * 5;  // the cut starts right away
     if (this.t >= (c.jukeCD || 0)) {
       c.jukeUntil = this.t + 0.3; c.jukeCD = this.t + 1.0;
-      c.vx += c.cutDx * 3; c.vy += c.cutDy * 4;
+      c.vx += c.cutDx * 3; c.vy += c.cutDy * 3;
       this.events.push('juke');
     }
   }
@@ -395,11 +397,19 @@ class Play {
     if (this.userTook && inp && inp.active && inp.mag > 0.2) { dx = inp.dx; dy = inp.dy; c.lastDy = dy; }
     else if (this.t < (c.cutUntil || 0)) { dx = c.cutDx; dy = c.cutDy; c.lastDy = dy; }
     else if (!this.userTook && c.path && c.pathIdx < c.path.length) { this.followPath(c, dt); return; }
-    else if (this.userTook) { dy = (c.lastDy || 0) * 0.5; dx = 1; c.lastDy = (c.lastDy || 0) * Math.pow(0.1, dt); }
+    else if (this.userTook) { dy = (c.lastDy || 0) * 0.8; dx = 1; c.lastDy = (c.lastDy || 0) * Math.pow(0.35, dt); }
     const m = Math.hypot(dx, dy) || 1;
     let sp = c.maxSp * (this.t < (c.jukeUntil || 0) ? 1.12 : 1);
     if (c.slowUntil > this.t) sp *= 0.55;
-    this.accelTo(c, dx / m * sp, dy / m * sp, dt);
+    // The field is drawn squashed top to bottom, so sideways yards look tiny on
+    // screen. When you steer, sideways movement gets a boost so it reads.
+    let vx = dx / m * sp, vy = dy / m * sp;
+    if (this.userTook) {
+      vy *= CARRIER_LATERAL;
+      const v = Math.hypot(vx, vy), cap = sp * 1.35;
+      if (v > cap) { vx *= cap / v; vy *= cap / v; }
+    }
+    this.accelTo(c, vx, vy, dt * (this.userTook ? 1.4 : 1));
   }
 
   // Pick and engage a defender
