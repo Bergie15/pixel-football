@@ -313,6 +313,8 @@ class Play {
 
   updateCam(dt) {
     let target = this.los + 13;
+    // aiming deep: slide downfield so the target stays in view
+    if (this.phase === 'pocket' && this.aim && this.aimFollow) target = Math.max(target, Math.min(this.aim.x, this.qb.x + 70) - 10);
     if (this.phase === 'air') target = this.ball.x + 6;
     else if (this.phase === 'run' || this.phase === 'dead') target = (this.carrier ? this.carrier.x : this.ball.x) + 7;
     this.camX += (target - this.camX) * Math.min(1, dt * 3.2);

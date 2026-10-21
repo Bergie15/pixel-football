@@ -90,10 +90,15 @@ const UI = (() => {
     let sx, sy;
     if (settings.aim === 'pull') {
       const qx = (p.qb.x - cam) * SX + W / 2, qy = FIELD_TOP + p.qb.y * SY;
-      sx = qx + (aiming.ax - pt.x) * 2.6; sy = qy + (aiming.ay - pt.y) * 2.6;
-      aiming.len = Math.hypot(aiming.ax - pt.x, aiming.ay - pt.y);
+      // Progressive slingshot: short pulls stay precise, long pulls reach deep.
+      // A ~60 art-pixel pull (about 120 css px on a phone) throws 40+ yards.
+      const dx = aiming.ax - pt.x, dy = aiming.ay - pt.y, len = Math.hypot(dx, dy);
+      const gain = 4 + len / 20;
+      sx = qx + dx * gain; sy = qy + dy * gain * 0.45;  // across-field yards are short on screen
+      aiming.len = len;
     } else { sx = pt.x; sy = pt.y; aiming.len = 99; }
-    p.aim = { x: cam + (sx - W / 2) / SX, y: (sy - FIELD_TOP) / SY };
+    p.aim = { x: cam + (sx - W / 2) / SX, y: clamp((sy - FIELD_TOP) / SY, -2, FIELD_W + 2) };
+    p.aimFollow = settings.aim === 'pull';
   }
 
   function onDown(e) {
