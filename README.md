@@ -24,7 +24,7 @@ npx serve .          # or: python3 -m http.server
   - **Fumbles** are rare: about 1 in 100 tackles when running normally, and about 3 in 100 when trucking. Strong runners and sure-handed receivers fumble less, good defenses force more, and strip sacks and blindside hits are riskier. Your team falls on about a quarter of them.
 
   You can put your thumb down during the handoff. Hit **RUN** to scramble with the quarterback.
-- **Catch.** Once the ball is in the air, every receiver who can reach it goes for it, and a receiver lays out for a diving catch when it's just out of reach.
+- **Catch.** Once the ball is in the air, a yellow ring on the grass marks where it comes down. The ring tightens and flashes as the ball arrives, a small × shows where it would hit the turf, and an arrow at the screen edge points to deep balls. Every receiver who can reach it goes for it, and a receiver lays out for a diving catch when it's just out of reach.
 - **Kick.** Tap when the needle is in the green, then watch it fly at the uprights.
 - **Difficulty.** Easy, Normal or Hard in Settings. This changes how good opposing defenses and offenses are.
 

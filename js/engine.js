@@ -813,6 +813,8 @@ class Play {
     let target = null;
     if (this.aim && this.canThrow()) target = this.drawAim(ctx, sx, sy);
 
+    if (this.phase === 'air' && !this.kickoff && this.ball && this.ball.dur) this.drawLanding(ctx, sx, sy, W);
+
     // players sorted by depth
     const list = this.ents.slice().sort((a, b) => a.y - b.y);
     for (const e of list) {
@@ -919,6 +921,36 @@ class Play {
       ctx.fillRect(Math.round(sx(end.x)) - 1, Math.round(sy(end.y)) - 2, 3, 3);
     });
     ctx.globalAlpha = 1;
+  }
+
+  // While the ball is in the air: a ring on the grass where it comes down to
+  // catch height, tightening as it arrives, and a small mark where it would hit
+  // the turf if nobody gets there.
+  drawLanding(ctx, sx, sy, W) {
+    const b = this.ball, u = clamp((this.t - b.t0) / b.dur, 0, 1);
+    const cx = sx(b.tx), cy = sy(b.ty);
+    const r = lerp(1.8, 1.0, u), rx = r * SX, ry = Math.max(3, r * SY * 1.5);
+    const col = u > 0.8 && Math.floor(this.t * 12) % 2 ? '#ffffff' : '#ffe14a';
+    const ring = (dx, dy, c) => {
+      ctx.fillStyle = c;
+      for (let i = 0; i < 28; i++) {
+        const a = i / 28 * Math.PI * 2;
+        ctx.fillRect(cx + Math.cos(a) * rx - 1 + dx, cy + Math.sin(a) * ry - 0.75 + dy, 2, 1.5);
+      }
+    };
+    ring(0, 0.75, 'rgba(0,0,0,0.35)');
+    ring(0, 0, col);
+    ctx.fillRect(cx - 1, cy - 0.75, 2, 1.5);
+    // where it hits the turf if nobody gets there
+    const g = ballAt(b, ballEnd(b)), gx = sx(g.x), gy = sy(g.y);
+    ctx.fillStyle = 'rgba(255,225,74,0.6)';
+    for (let k = -2; k <= 2; k++) { ctx.fillRect(gx + k - 0.5, gy + k * 0.6 - 0.5, 1, 1); ctx.fillRect(gx + k - 0.5, gy - k * 0.6 - 0.5, 1, 1); }
+    // deep ball past the edge of the screen: point to it
+    if (cx > W - 4) {
+      const ay = clamp(cy, 10, 1e4);
+      ctx.fillStyle = col;
+      for (let k = 0; k < 4; k++) ctx.fillRect(W - 3 - k, ay - k, 1, k * 2 + 1);
+    }
   }
 
   drawAim(ctx, sx, sy) {
