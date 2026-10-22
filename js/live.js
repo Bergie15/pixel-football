@@ -550,6 +550,7 @@ function liveRunEnd(p) {
 }
 
 class LivePlay extends Play {
+  fumbleChance() { return 0; }   // replays follow the real play-by-play
   // the viewer only watches: no aiming, throwing, scrambling or runner moves by touch
   dive() {} backstep() {} setTruck() {} juke() {} cut() {}
   canThrow() { return !!this.liveThrowing && this.phase === 'pocket' && this.qb.hasBall; }

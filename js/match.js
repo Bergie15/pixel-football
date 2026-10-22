@@ -68,6 +68,7 @@ class Match {
       return UI.banner('TOUCHDOWN!', `Kick return · ${who}`, () => this.conversion(), 'td');
     }
     const spot = Math.round(clamp(r.spot, 1, 99));
+    if (r.type === 'fumble') return UI.banner('FUMBLE!', `Lost on the return · ${who}`, () => this.afterClock(() => this.possessionOver(100 - spot)), 'bad');
     UI.banner(r.label === 'TOUCHBACK' ? 'TOUCHBACK' : `RETURN TO THE ${spot > 50 ? 'OPP ' + (100 - spot) : spot}`, r.label === 'TOUCHBACK' ? 'Ball on the 25' : who,
       () => this.afterClock(() => this.beginDrive(spot)), spot >= 40 ? 'good' : '');
   }
@@ -161,6 +162,8 @@ class Match {
         this.score.o += 2;
         UI.hudUpdate(this);
         return UI.banner('SAFETY', `${this.opp.mascot} +2`, () => this.afterClock(() => this.possessionOver(35 + Math.round(Math.random() * 10))), 'bad');
+      case 'fumble':
+        return UI.banner('FUMBLE!', `Lost it · ${who}`, () => this.afterClock(() => this.possessionOver(clamp(100 - r.spot, 1, 99))), 'bad');
       case 'int':
         return UI.banner('INTERCEPTED!', 'Turnover', () => this.afterClock(() => this.possessionOver(r.spot >= 100 ? 25 : clamp(100 - r.spot, 1, 99))), 'bad');
     }
@@ -172,6 +175,7 @@ class Match {
     else { label = yds > 0 ? `GAIN OF ${yds}` : yds === 0 ? 'NO GAIN' : `LOSS OF ${-yds}`; sub = who; }
 
     if (r.label === 'DIVE' && r.type === 'tackle') sub = `Dove forward · ${who}`;
+    if (r.label === 'RECOVERED') sub = 'Fumbled · you recovered';
     const dive = r.label === 'DIVING CATCH!';
     if (dive) { sub = `${label} · ${who}`; label = 'DIVING CATCH!'; tone = 'good'; }
     if (newLos >= this.fd) {

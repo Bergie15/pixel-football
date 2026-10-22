@@ -741,11 +741,29 @@ class Play {
     if (c.x >= 100 && !inPocket) return this.endPlay('td', 'TOUCHDOWN!');
   }
 
+  // Chance the hit jars the ball loose. A diving runner never gets here, so a
+  // dive is always safe; lowering the shoulder to truck puts the ball at risk.
+  fumbleChance(c, d, sack) {
+    const pl = c.player || {};
+    const sec = pl.hnd || pl.pow || 3;
+    let p = 0.012 + 0.006 * (this.dr - 3) - 0.004 * (sec - 3);
+    if (c.truck) p += 0.025;
+    if (sack) p += 0.03;                       // strip sack
+    if (d.x < c.x - 0.3) p += 0.01;            // blindside hit from behind
+    return clamp(p, 0.004, 0.08);
+  }
+
   tackle(c, d, sack) {
     c.down = true; d.down = rnd() < 0.5;
     let spot = c.x + (c.vx > 1 ? 0.5 : 0);
     this.events.push('tackle');
     if (spot <= 0) return this.endPlay('safety', 'SAFETY!', 0);
+    if (rnd() < this.fumbleChance(c, d, sack)) {
+      this.events.push('fumble');
+      // the offense falls on it about a quarter of the time
+      if (rnd() < 0.25) return this.endPlay(sack ? 'sack' : 'tackle', 'RECOVERED', Math.min(spot, 99.5));
+      return this.endPlay('fumble', 'FUMBLE!', clamp(spot, 0.5, 99.5));
+    }
     if (sack) return this.endPlay('sack', 'SACKED!', spot);
     this.endPlay('tackle', '', Math.min(spot, 99.5));
   }

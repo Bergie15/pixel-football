@@ -16,10 +16,12 @@ npx serve .          # or: python3 -m http.server
 - **Throw.** Touch anywhere and pull back like a slingshot, then let go to throw. A short pull throws a flat, fast line drive, and pulling further turns it into a higher, softer lob that a receiver can run under. The dotted arc shows the shape as you pull. Short pulls are precise and longer pulls reach deep: about a thumb's length throws 40+ yards, and the camera slides downfield while you aim. The ball reaches the end of the dotted arc about chest high, so you can throw it out in front of a receiver and he runs onto it. It keeps carrying a couple of yards past that spot as it comes down. Like Retro Bowl, the ball goes where you aim, with only a light nudge toward a receiver's path when you're within a few yards. A faint dot marks where your thumb went down and a ring shows your quarterback. Receivers go to the ball and dive for ones just out of reach, and "CAUGHT!" pops over the receiver. The dot over each receiver turns green when he's open. If you'd rather point at the spot, switch the aim style in Settings.
 - **Run.** On run plays, kick returns and after a catch:
   - **Drag** to steer.
-  - **Swipe forward** to dive for extra yards. The play ends where he lands.
-  - **Press and hold** to truck: he's slower, but tacklers bounce off.
+  - **Swipe forward** to dive for extra yards. The play ends where he lands, and a diving runner can't fumble.
+  - **Press and hold** to truck: he's slower and tacklers bounce off, but the ball is easier to knock loose.
   - **Swipe backward** to back-step so the tackler whiffs.
   - **Swipe up or down** for a hard cut, or **tap** for a quick juke.
+
+  - **Fumbles** are rare: about 1 in 100 tackles when running normally, and about 3 in 100 when trucking. Strong runners and sure-handed receivers fumble less, good defenses force more, and strip sacks and blindside hits are riskier. Your team falls on about a quarter of them.
 
   You can put your thumb down during the handoff. Hit **RUN** to scramble with the quarterback.
 - **Catch.** Once the ball is in the air, every receiver who can reach it goes for it, and a receiver lays out for a diving catch when it's just out of reach.
