@@ -63,6 +63,51 @@ const DIGITS57 = {
   '4': ['   # ', '  ## ', ' # # ', '#  # ', '#####', '   # ', '   # '],
   '5': ['#####', '#    ', '#### ', '    #', '    #', '#   #', ' ### '],
 };
+// 5x7 capitals for the midfield initials (the 3x5 font muddles W, M and N at that size).
+const LETTERS57 = {
+  A: [' ### ', '#   #', '#   #', '#####', '#   #', '#   #', '#   #'],
+  B: ['#### ', '#   #', '#   #', '#### ', '#   #', '#   #', '#### '],
+  C: [' ### ', '#   #', '#    ', '#    ', '#    ', '#   #', ' ### '],
+  D: ['#### ', '#   #', '#   #', '#   #', '#   #', '#   #', '#### '],
+  E: ['#####', '#    ', '#    ', '#### ', '#    ', '#    ', '#####'],
+  F: ['#####', '#    ', '#    ', '#### ', '#    ', '#    ', '#    '],
+  G: [' ### ', '#   #', '#    ', '# ###', '#   #', '#   #', ' ####'],
+  H: ['#   #', '#   #', '#   #', '#####', '#   #', '#   #', '#   #'],
+  I: ['#####', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '#####'],
+  J: ['  ###', '    #', '    #', '    #', '    #', '#   #', ' ### '],
+  K: ['#   #', '#  # ', '# #  ', '##   ', '# #  ', '#  # ', '#   #'],
+  L: ['#    ', '#    ', '#    ', '#    ', '#    ', '#    ', '#####'],
+  M: ['#   #', '## ##', '# # #', '# # #', '#   #', '#   #', '#   #'],
+  N: ['#   #', '##  #', '# # #', '#  ##', '#   #', '#   #', '#   #'],
+  O: [' ### ', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '],
+  P: ['#### ', '#   #', '#   #', '#### ', '#    ', '#    ', '#    '],
+  Q: [' ### ', '#   #', '#   #', '#   #', '# # #', '#  # ', ' ## #'],
+  R: ['#### ', '#   #', '#   #', '#### ', '# #  ', '#  # ', '#   #'],
+  S: [' ####', '#    ', '#    ', ' ### ', '    #', '    #', '#### '],
+  T: ['#####', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '  #  '],
+  U: ['#   #', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '],
+  V: ['#   #', '#   #', '#   #', '#   #', '#   #', ' # # ', '  #  '],
+  W: ['#   #', '#   #', '#   #', '# # #', '# # #', '## ##', '#   #'],
+  X: ['#   #', '#   #', ' # # ', '  #  ', ' # # ', '#   #', '#   #'],
+  Y: ['#   #', '#   #', ' # # ', '  #  ', '  #  ', '  #  ', '  #  '],
+  Z: ['#####', '    #', '   # ', '  #  ', ' #   ', '#    ', '#####'],
+};
+// The school's initials painted big at midfield, with a 1px outline.
+function initialsCanvas(str, fill, outline) {
+  const s = str.length <= 4 ? 3 : 2, gap = s, cw = 5 * s + gap;
+  const w = str.length * cw - gap + 2 * s, h = 7 * s + 2 * s;
+  const c = mkCanvas(w, h), g = c.getContext('2d');
+  const paint = (col, d) => {
+    g.fillStyle = col;
+    [...str].forEach((ch, i) => (LETTERS57[ch] || DIGITS57[ch] || []).forEach((row, y) => [...row].forEach((v, x) => {
+      if (v === '#') g.fillRect(s + i * cw + x * s - d, s + y * s - d, s + 2 * d, s + 2 * d);
+    })));
+  };
+  paint(outline, Math.max(1, s - 1));
+  paint(fill, 0);
+  return c;
+}
+
 function yardNumberCanvas(str, color) {
   const s = 2, gap = 2;
   const c = mkCanvas(str.length * (5 * s + gap) - gap, 7 * s), g = c.getContext('2d');
@@ -290,10 +335,12 @@ function buildFieldStrip(home, away) {
     blitRot(g, logo, fx(x), fy(FIELD_W - 4.5), 0);
   }
   // Midfield circle
-  const mid = textCanvas(home.id, 4, '#f4f4f4', home.c1);
-  g.fillStyle = shade(home.c1, -0.1);
-  g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), 30, 17, 0, 0, Math.PI * 2); g.fill();
+  const mid = initialsCanvas(home.id.toUpperCase(), '#f4f4f4', shade(home.c1, -0.35));
   g.fillStyle = LINE; g.fillRect(fx(50), FIELD_TOP, 1, yBot - FIELD_TOP);
+  g.fillStyle = '#f4f4f4';
+  g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), mid.width / 2 + 9, 19, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = home.c1;
+  g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), mid.width / 2 + 7, 17, 0, 0, Math.PI * 2); g.fill();
   blitRot(g, mid, fx(50) + 1, fy(FIELD_W / 2), 0);
 
   // End zone names, reading along the end line
