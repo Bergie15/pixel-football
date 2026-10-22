@@ -47,6 +47,9 @@ const UI = (() => {
       case 'handoff': tone(440, 0.05, 'triangle', 0.08); break;
       case 'tackle': noise(0.12, 0.22); tone(90, 0.12, 'triangle', 0.15); buzz(35); break;
       case 'juke': tone(900, 0.06, 'triangle', 0.06, 0, 500); break;
+      case 'dive': noise(0.14, 0.12); tone(600, 0.12, 'triangle', 0.06, 0, -300); break;
+      case 'truckon': tone(160, 0.08, 'square', 0.05); break;
+      case 'truck': noise(0.16, 0.3); tone(70, 0.16, 'triangle', 0.18); buzz(45); break;
       case 'whiff': tone(500, 0.08, 'triangle', 0.05, 0, -250); break;
       case 'break': noise(0.08, 0.18); tone(300, 0.1, 'square', 0.05, 0.02, 200); break;
       case 'td': [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.14, 'square', 0.05, i * 0.11)); buzz([40, 60, 40]); break;
@@ -150,7 +153,13 @@ const UI = (() => {
       const pt = toInternal(e), held = performance.now() - stick.t0;
       const sdx = pt.x - stick.x0, sdy = pt.y - stick.y0, slen = Math.hypot(sdx, sdy) * stick.k;
       if (!stick.moved && held < 260) p.juke();
-      else if (held < 450 && slen > 18) p.cut(sdx / SX, sdy / SY);  // swipe = cut
+      else if (held < 450 && slen > 18) {
+        // swipe ahead = dive, swipe back = back-step juke, up/down = cut
+        if (sdx > 0 && sdx > Math.abs(sdy) * 1.2) p.dive();
+        else if (sdx < 0 && -sdx > Math.abs(sdy) * 1.2) p.backstep();
+        else p.cut(sdx / SX, sdy / SY);
+      }
+      if (p.setTruck) p.setTruck(false);
 
       stick = null; input.active = false; input.mag = 0;
     }
@@ -360,6 +369,7 @@ const UI = (() => {
         if (u >= 1) { match.kickAnim = null; k.cb(); }
       } else if (p) {
         p.input = input;
+        if (p.setTruck && p.carrier) p.setTruck(!!(stick && !stick.moved && performance.now() - stick.t0 > 220));
         if (!paused) p.update(dt);
         while (p.events.length) { const ev = p.events.shift(); sfx(ev); if (ev === 'td') confettiBurst(match.user); }
         if (p.phase === 'dead' && p.deadT > 0.9 && !p.reported) {

@@ -14,7 +14,15 @@ npx serve .          # or: python3 -m http.server
 - **Kickoffs.** When you receive, both teams line up and you tap **Kick Off**. Then return it yourself.
 - **Snap.** The ball is snapped a moment after you call the play. Tap to snap it sooner.
 - **Throw.** Touch anywhere and pull back like a slingshot, then let go to throw. Short pulls are precise and longer pulls reach deep: about a thumb's length throws 40+ yards, and the camera slides downfield while you aim. Aim near a receiver and the throw locks onto where he's headed: he gets a white ring, and the dotted arc shows where the ball will land. Receivers dive for balls just out of reach. The dot over each receiver turns green when he's open. If you'd rather point at the spot, switch the aim style in Settings.
-- **Run.** On run plays and after a catch, drag to steer, swipe to make a hard cut, and tap to juke. You can put your thumb down during the handoff. Hit **RUN** to scramble with the quarterback.
+- **Run.** On run plays, kick returns and after a catch:
+  - **Drag** to steer.
+  - **Swipe forward** to dive for extra yards. The play ends where he lands.
+  - **Press and hold** to truck: he's slower, but tacklers bounce off.
+  - **Swipe backward** to back-step so the tackler whiffs.
+  - **Swipe up or down** for a hard cut, or **tap** for a quick juke.
+
+  You can put your thumb down during the handoff. Hit **RUN** to scramble with the quarterback.
+- **Catch.** Once the ball is in the air, every receiver who can reach it goes for it, and a receiver lays out for a diving catch when it's just out of reach.
 - **Kick.** Tap when the needle is in the green, then watch it fly at the uprights.
 - **Difficulty.** Easy, Normal or Hard in Settings. This changes how good opposing defenses and offenses are.
 

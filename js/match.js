@@ -171,6 +171,7 @@ class Match {
     else if (r.type === 'sack') { label = 'SACKED'; sub = `Loss of ${Math.abs(yds)}`; tone = 'bad'; }
     else { label = yds > 0 ? `GAIN OF ${yds}` : yds === 0 ? 'NO GAIN' : `LOSS OF ${-yds}`; sub = who; }
 
+    if (r.label === 'DIVE' && r.type === 'tackle') sub = `Dove forward · ${who}`;
     const dive = r.label === 'DIVING CATCH!';
     if (dive) { sub = `${label} · ${who}`; label = 'DIVING CATCH!'; tone = 'good'; }
     if (newLos >= this.fd) {

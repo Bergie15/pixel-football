@@ -550,7 +550,8 @@ function liveRunEnd(p) {
 }
 
 class LivePlay extends Play {
-  // the viewer only watches: no aiming, throwing or scrambling by touch
+  // the viewer only watches: no aiming, throwing, scrambling or runner moves by touch
+  dive() {} backstep() {} setTruck() {} juke() {} cut() {}
   canThrow() { return !!this.liveThrowing && this.phase === 'pocket' && this.qb.hasBall; }
   update(dt) {
     if (this.phase === 'presnap') {
@@ -617,6 +618,7 @@ class LivePlay extends Play {
 }
 
 class LiveKick extends KickoffPlay {
+  dive() {} backstep() {} setTruck() {} juke() {} cut() {}
   update(dt) {
     if (this.phase === 'presnap') {
       this.wait = (this.wait || 0) + dt;

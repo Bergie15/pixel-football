@@ -145,6 +145,36 @@ class Play {
     this.events.push('juke');
   }
 
+  // Swipe forward: lay out for extra yards. The play ends where he lands.
+  dive() {
+    const c = this.carrier;
+    if (!c || this.phase !== 'run' || c.diving) return;
+    this.userTook = true;
+    c.diving = true; c.diveEnd = this.t + 0.38;
+    const sp = Math.max(Math.hypot(c.vx, c.vy), c.maxSp * 0.8) * 1.25;
+    c.vx = sp; c.vy *= 0.3;
+    this.events.push('dive');
+  }
+
+  // Swipe backward: plant and back-step so the tackler flies past.
+  backstep() {
+    const c = this.carrier;
+    if (!c || this.phase !== 'run' || this.t < (c.jukeCD || 0)) return;
+    this.userTook = true;
+    c.jukeUntil = this.t + 0.45; c.jukeCD = this.t + 0.9;
+    c.backUntil = this.t + 0.28;
+    c.vx = -2.5;
+    for (const d of this.def) if (dist(d, c) < 2.6 && this.isFree(d)) { d.stunUntil = this.t + 0.75; d.vx *= 1.3; }
+    this.events.push('juke');
+  }
+
+  // Hold: lower the shoulder. Slower, but tacklers bounce off.
+  setTruck(on) {
+    const c = this.carrier;
+    if (c && c.truck !== on && on) this.events.push('truckon');
+    if (c) c.truck = on && this.phase === 'run';
+  }
+
   // A quick swipe: hard cut in the swipe direction, with a juke if it's ready.
   cut(dx, dy) {
     const c = this.carrier;
@@ -222,6 +252,12 @@ class Play {
       }
     }
     if (best) best.track = true;
+    // anyone else who can get there breaks off his route for the ball too
+    for (const r of this.receivers) {
+      if (r.block || r === best) continue;
+      const dd = Math.hypot(r.x - tx, r.y - ty);
+      if (dd < Math.min(14, r.maxSp * dur + 3)) r.track = true;
+    }
     // Defenders who can get there react after a beat
     for (const e of this.def) {
       if (e.kind === 'DL') continue;
@@ -351,6 +387,15 @@ class Play {
       // time the run so the receiver meets the ball instead of waiting under it
       const b = this.ball, rem = Math.max(0.05, b.t0 + b.dur - t);
       const d = Math.hypot(b.tx - o.x, b.ty - o.y);
+      if (o.diving) { o.vx *= Math.pow(0.15, dt); o.vy *= Math.pow(0.15, dt); return; }
+      // just out of reach as it comes down: lay out for it
+      const shortBy = d - Math.hypot(o.vx, o.vy) * rem;  // how far he'll still be when it lands
+      if (rem < 0.32 && shortBy > 1.6 && d < 4.6) {
+        o.diving = true;
+        const s = Math.min(14, d / rem);
+        o.vx = (b.tx - o.x) / d * s; o.vy = (b.ty - o.y) / d * s;
+        return;
+      }
       const need = clamp(d / rem, 0, o.maxSp) / o.maxSp;
       this.steer(o, b.tx, b.ty, dt, Math.max(need, d > 0.5 ? 0.35 : 0), 0.1);
       return;
@@ -393,6 +438,17 @@ class Play {
   }
 
   updateCarrier(c, dt) {
+    if (c.diving) {
+      // airborne: no steering, a little drag, then down at the spot
+      c.vx *= Math.pow(0.5, dt); c.vy *= Math.pow(0.3, dt);
+      if (this.t >= c.diveEnd) {
+        c.down = true;
+        if (c.x >= 100) return this.endPlay('td', 'TOUCHDOWN!');
+        return this.endPlay('tackle', 'DIVE', clamp(c.x, 0.5, 99.5));
+      }
+      return;
+    }
+    if (this.t < (c.backUntil || 0)) { this.accelTo(c, -2.5, c.vy * 0.5, dt); return; }
     const inp = this.input;
     if (inp && inp.active && inp.mag > 0.2) this.userTook = true;
     let dx = 1, dy = 0;
@@ -403,6 +459,7 @@ class Play {
     const m = Math.hypot(dx, dy) || 1;
     let sp = c.maxSp * (this.t < (c.jukeUntil || 0) ? 1.12 : 1);
     if (c.slowUntil > this.t) sp *= 0.55;
+    if (c.truck) sp *= 0.85;
     // The field is drawn squashed top to bottom, so sideways yards look tiny on
     // screen. When you steer, sideways movement gets a boost so it reads.
     let vx = dx / m * sp, vy = dy / m * sp;
@@ -559,7 +616,7 @@ class Play {
     for (const e of this.def) { if (e.blockedBy) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < ddd) { ddd = k; dfd = e; } }
     if (!r && !dfd && u >= 1) {
       // just out of reach: the receiver lays out for it
-      let dv = null, dvd = 3.2;
+      let dv = null, dvd = 4.4;
       for (const e of this.receivers) { if (e.block && !e.track) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < dvd) { dvd = k; dv = e; } }
       if (dv) return this.divingCatch(dv, dvd);
       return this.endPlay('inc', 'INCOMPLETE');
@@ -570,6 +627,7 @@ class Play {
 
   resolveCatch(r, rd, d, dd) {
     const b = this.ball;
+    if (r && r.diving && (!d || rd <= dd + 0.35)) return this.divingCatch(r, rd);
     const oob = b.y < 0 || b.y > FIELD_W || b.x > 110;
     if (r && (!d || rd <= dd + 0.35)) {
       let contest = 0;
@@ -599,7 +657,7 @@ class Play {
     let contest = 0;
     for (const e of this.def) if (!e.blockedBy && dist(e, b) < 1.6) contest += 1 - dist(e, b) / 1.6;
     const hands = (r.player && r.player.hnd) || 3;
-    const p = 0.82 + 0.05 * (hands - 3) - (k - 1.9) * 0.15 - contest * 0.35;
+    const p = 0.86 + 0.05 * (hands - 3) - Math.max(0, k - 1.9) * 0.1 - contest * 0.35;
     r.x = b.x; r.y = clamp(b.y, -0.5, FIELD_W + 0.5); r.vx *= 0.3; r.vy *= 0.3; r.down = true;
     if (b.y < 0 || b.y > FIELD_W || b.x > 110 || rnd() > p) return this.endPlay('inc', 'INCOMPLETE');
     this.catcher = r;
@@ -626,11 +684,20 @@ class Play {
         continue;
       }
       if (dist(d, c) > TACKLE_R) continue;
+      if (c.diving) continue;
       if (t < (c.jukeUntil || 0)) { d.stunUntil = t + 0.9; this.events.push('whiff'); continue; }
       if (inPocket) return this.tackle(c, d, true);
+      if (t < (d.bouncedUntil || 0)) continue;
       const pow = c.player ? (c.player.pow || c.player.spd || 3) : 3;
-      const pBreak = (c === this.qb ? 0.05 : 0.1) + 0.04 * (pow - 3) - 0.03 * (this.dr - 3);
-      if (rnd() < pBreak) { d.stunUntil = t + 0.8; c.slowUntil = t + 0.3; this.events.push('break'); continue; }
+      let pBreak = (c === this.qb ? 0.05 : 0.1) + 0.04 * (pow - 3) - 0.03 * (this.dr - 3);
+      if (c.truck) pBreak = clamp(0.5 + 0.08 * (pow - 3) - 0.05 * (this.dr - 3), 0.25, 0.8);
+      if (rnd() < pBreak) {
+        d.stunUntil = t + (c.truck ? 1.2 : 0.8); d.bouncedUntil = t + 1.2;
+        if (c.truck) { d.down = true; d.vx = 3; d.downUntil = t + 1.2; }
+        c.slowUntil = t + (c.truck ? 0.15 : 0.3);
+        this.events.push(c.truck ? 'truck' : 'break');
+        continue;
+      }
       return this.tackle(c, d);
     }
     // sideline / goal line
@@ -709,7 +776,7 @@ class Play {
       if (e.vx < -0.8) facing = -1; else if (e.vx > 0.8) facing = 1;
       const pose = sp < 0.6 ? 'stand' : (Math.floor(e.anim * 1.4) & 1 ? 'runA' : 'runB');
       const spr = getSprite(kit, e.skin, pose, facing);
-      if (e.down && this.phase === 'dead') {
+      if ((e.down && this.phase === 'dead') || e.diving || (e.downUntil && this.t < e.downUntil)) {
         blitRot(ctx, spr, px, py - 3, facing > 0 ? 1 : 3);
       } else {
         const flash = e === this.carrier && this.t < (e.jukeUntil || 0);
