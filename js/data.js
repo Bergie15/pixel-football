@@ -9,7 +9,7 @@
 const TEAMS = [
   // MIAC — Minnesota Intercollegiate Athletic Conference
   { id: 'AUG',   name: 'Augsburg',           mascot: 'Auggies',       conf: 'MIAC', city: 'Minneapolis, MN',   c1: '#7a1f2b', c2: '#a2a6a8', off: 2.4, def: 2.3 },
-  { id: 'BETH',  name: 'Bethel',             mascot: 'Royals',        conf: 'MIAC', city: 'Arden Hills, MN',   c1: '#00427a', c2: '#f2a900', off: 3.9, def: 3.8 },
+  { id: 'BETH',  name: 'Bethel',             mascot: 'Royals', abbr: 'BU',       conf: 'MIAC', city: 'Arden Hills, MN',   c1: '#00427a', c2: '#f2a900', off: 3.9, def: 3.8 },
   { id: 'CARL',  name: 'Carleton',           mascot: 'Knights',       conf: 'MIAC', city: 'Northfield, MN',    c1: '#0b2341', c2: '#f6c13a', off: 2.5, def: 2.3 },
   { id: 'CORD',  name: 'Concordia-Moorhead', mascot: 'Cobbers',       conf: 'MIAC', city: 'Moorhead, MN',      c1: '#6c1d45', c2: '#d4a10f', off: 3.0, def: 2.9 },
   { id: 'GUST',  name: 'Gustavus Adolphus',  mascot: 'Gusties',       conf: 'MIAC', city: 'St. Peter, MN',     c1: '#1a1a1a', c2: '#e6b711', off: 3.1, def: 3.2 },

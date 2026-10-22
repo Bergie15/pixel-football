@@ -308,8 +308,8 @@ const UI = (() => {
   function hudUpdate(m) {
     const away = m.userHome ? m.opp : m.user, home = m.userHome ? m.user : m.opp;
     const as = m.userHome ? m.score.o : m.score.u, hs = m.userHome ? m.score.u : m.score.o;
-    $('hAway').textContent = `${away.id} ${as}`;
-    $('hHome').textContent = `${home.id} ${hs}`;
+    $('hAway').textContent = `${away.abbr || away.id} ${as}`;
+    $('hHome').textContent = `${home.abbr || home.id} ${hs}`;
     $('hAway').classList.toggle('me', !m.userHome);
     $('hHome').classList.toggle('me', m.userHome);
     $('hClock').textContent = m.ot ? (m.otRound > 1 ? `OT${m.otRound}` : 'OT') : `${ORD[Math.min(m.q, 4)]} Qtr ${fmtClock(m.clock)}`;

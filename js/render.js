@@ -335,7 +335,7 @@ function buildFieldStrip(home, away) {
     blitRot(g, logo, fx(x), fy(FIELD_W - 4.5), 0);
   }
   // Midfield circle
-  const mid = initialsCanvas(home.id.toUpperCase(), '#f4f4f4', shade(home.c1, -0.35));
+  const mid = initialsCanvas((home.abbr || home.id).toUpperCase(), '#f4f4f4', shade(home.c1, -0.35));
   g.fillStyle = LINE; g.fillRect(fx(50), FIELD_TOP, 1, yBot - FIELD_TOP);
   g.fillStyle = '#f4f4f4';
   g.beginPath(); g.ellipse(fx(50) + 0.5, fy(FIELD_W / 2), mid.width / 2 + 9, 19, 0, 0, Math.PI * 2); g.fill();
