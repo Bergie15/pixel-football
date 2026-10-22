@@ -109,7 +109,9 @@ function makeKit(team, home) {
 // ---- Player sprites ----------------------------------------------------------
 // 12x19 sprites. H helmet, h helmet stripe, S skin, F facemask, J jersey,
 // N number/trim, P pants, L socks, B shoes.
-const SPR_SIDE = [
+// Side view is built from a head, a torso (arm swing) and legs, so the run
+// cycle can pump arms against legs like Retro Bowl's runners.
+const SPR_HEAD = [
   '....HHHH....',
   '...HHhhHHH..',
   '..HHHhhHHHH.',
@@ -117,15 +119,29 @@ const SPR_SIDE = [
   '..HHHHHSSSF.',
   '...HHHHSSF..',
   '....HHSS....',
-  '...JJJJJJ...',
-  '..JJJJJJJJ..',
-  '.JJJJNNJJJS.',
-  '.SJJJNNJJJS.',
-  '..JJJNNJJ...',
-  '..JJJJJJJ...',
-  '..PPPPPPP...',
-  '..PPPPPPP...',
 ];
+const SPR_TORSO = {
+  stand: ['...JJJJJJ...', '..JJJJJJJJ..', '.JJJJNNJJJS.', '.SJJJNNJJJS.', '..JJJNNJJ...', '..JJJJJJJ...'],
+  fwd:   ['...JJJJJJ...', '..JJJJJJJJS.', '.JJJJNNJJJS.', 'SJJJJNNJJJ..', 'S.JJJNNJJ...', '..JJJJJJJ...'],
+  mid:   ['...JJJJJJ...', '..JJJJJJJJ..', '..JJJNNJJJ..', '..JJSNNJJS..', '..JJJNNJJ...', '..JJJJJJJ...'],
+  back:  ['...JJJJJJ...', 'S.JJJJJJJJ..', 'SJJJJNNJJJ..', '.JJJJNNJJJS.', '..JJJNNJJ.S.', '..JJJJJJJ...'],
+};
+const SPR_LEGS = {
+  stand:   ['..PPPPPPP...', '..PPPPPPP...', '..PPP.PPP...', '..LL...LL...', '..LL...LL...', '..BBB..BBB..'],
+  strideA: ['..PPPPPPP...', '.PPPP.PPPP..', 'PPP.....PPP.', 'LL.......LL.', 'L.........LL', 'B.........BB'],
+  passA:   ['..PPPPPPP...', '...PPPPPP...', '...PP..PPP..', '...LL...LL..', '...LL.......', '...BB.......'],
+  strideB: ['..PPPPPPP...', '.PPPP.PPPP..', '.PP.....PPP.', '.LL......LL.', 'LL.......LL.', 'BB.......BBB'],
+  passB:   ['..PPPPPPP...', '...PPPPPP...', '..PPP..PP...', '..LL...LL...', '.......LL...', '.......BB...'],
+};
+// four-step run cycle: stride, pass, stride, pass (arms opposite the legs)
+const RUN_CYCLE = [['fwd', 'strideA'], ['mid', 'passA'], ['back', 'strideB'], ['mid', 'passB']];
+const lean = row => '.' + row.slice(0, -1);  // runners lean into it
+function sideRows(pose) {
+  if (pose === 'stand') return SPR_HEAD.concat(SPR_TORSO.stand, SPR_LEGS.stand);
+  const n = pose === 'runA' ? 0 : pose === 'runB' ? 2 : +pose.slice(3) || 0;
+  const [t, l] = RUN_CYCLE[n % 4];
+  return SPR_HEAD.map(lean).concat(SPR_TORSO[t].map((row, i) => (i < 2 ? lean(row) : row)), SPR_LEGS[l]);
+}
 const SPR_FRONT = [
   '....HHHH....',
   '...HHhhHH...',
@@ -146,9 +162,6 @@ const SPR_FRONT = [
 // people on the sideline: hair instead of a helmet, no facemask
 const SPR_CIV = SPR_FRONT.map(r => r.replace(/F/g, 'S'));
 const LEGS = {
-  stand: ['..PPP.PPP...', '..LL...LL...', '..LL...LL...', '..BBB..BBB..'],
-  runA:  ['.PPP...PPP..', '.LL.....LL..', 'LL.......LL.', 'BB.......BBB'],
-  runB:  ['...PPPPP....', '....LLL.....', '....LL......', '....BBBB....'],
   front: ['..PPP..PPP..', '..LLL..LLL..', '..LLL..LLL..', '..BBB..BBB..'],
 };
 const SPR_W = 12, SPR_H = 19;
@@ -158,8 +171,7 @@ function getSprite(kit, skin, pose, facing) {
   const key = kit.jersey + kit.helmet + kit.stripe + kit.pants + skin + pose + facing;
   let c = spriteCache.get(key);
   if (c) return c;
-  const body = pose === 'front' ? SPR_FRONT : pose === 'civ' ? SPR_CIV : SPR_SIDE;
-  const rows = body.concat(LEGS[pose === 'civ' ? 'front' : pose]);
+  const rows = pose === 'front' ? SPR_FRONT.concat(LEGS.front) : pose === 'civ' ? SPR_CIV.concat(LEGS.front) : sideRows(pose);
   c = mkCanvas(SPR_W, rows.length);
   const x = c.getContext('2d');
   const pal = { H: kit.helmet, h: kit.stripe, S: skin, F: '#a9adb3', J: kit.jersey, N: kit.num, P: kit.pants, L: kit.sock, B: '#191919' };

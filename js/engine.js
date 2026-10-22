@@ -308,6 +308,7 @@ class Play {
     for (const o of this.off) {
       if (o === e) continue;
       o.track = false;
+      if (!o.openField) o.accel *= 1.35;
       o.openField = true;
       if (!o.engaged) o.bt = null;
     }
@@ -477,6 +478,9 @@ class Play {
     this.accelTo(c, vx, vy, dt * (this.userTook ? 1.4 : 1));
   }
 
+  // Downfield blockers get a burst so they can stay ahead of the runner
+  blockBoost(o) { return o.kind === 'OL' ? 1.4 : o.kind === 'TE' ? 1.18 : 1.1; }
+
   // Pick and engage a defender
   blockerAI(o, dt) {
     const t = this.t;
@@ -496,14 +500,15 @@ class Play {
     }
     if (!o.bt) {
       // hold the pocket / lead the way
-      if (o.openField && this.carrier) this.steer(o, this.carrier.x + 3, this.carrier.y + (o.y > this.carrier.y ? 2 : -2), dt, 0.8);
+      // nobody to block: get out in front of the ball carrier
+      if (o.openField && this.carrier) this.steer(o, this.carrier.x + 4 + this.carrier.vx * 0.3, this.carrier.y + (o.y > this.carrier.y ? 2 : -2), dt, this.blockBoost(o));
       else this.steer(o, o.kind === 'OL' && this.phase === 'pocket' ? this.los - 1.5 : o.x, o.y, dt, 0.4);
       return;
     }
     const d = o.bt;
     const gx = h.x - d.x, gy = h.y - d.y, gm = Math.hypot(gx, gy) || 1;
     // get between the defender and the ball
-    this.steer(o, d.x + gx / gm * 0.9, d.y + gy / gm * 0.9, dt, 1, 0.2);
+    this.steer(o, d.x + gx / gm * 0.9, d.y + gy / gm * 0.9, dt, o.openField ? this.blockBoost(o) : 1, 0.2);
     if (dist(o, d) < 1.15 && this.isFree(d) && t >= d.shedImmune) {
       const diff = this.units.ol - this.dr;
       let shed;
@@ -784,14 +789,17 @@ class Play {
       const sp = Math.hypot(e.vx, e.vy);
       let facing = e.side === 'off' ? 1 : -1;
       if (e.vx < -0.8) facing = -1; else if (e.vx > 0.8) facing = 1;
-      const pose = sp < 0.6 ? 'stand' : (Math.floor(e.anim * 1.4) & 1 ? 'runA' : 'runB');
+      // stride rate follows speed (anim accumulates yards travelled)
+      const step = Math.floor(e.anim * 1.7) % 4;
+      const pose = sp < 0.6 ? 'stand' : 'run' + step;
       const spr = getSprite(kit, e.skin, pose, facing);
+      const bob = sp >= 0.6 && step % 2 ? 1 : 0;  // up a pixel on the passing steps
       if ((e.down && this.phase === 'dead') || e.diving || (e.downUntil && this.t < e.downUntil)) {
         blitRot(ctx, spr, px, py - 3, facing > 0 ? 1 : 3);
       } else {
         const flash = e === this.carrier && this.t < (e.jukeUntil || 0);
         ctx.globalAlpha = flash ? 0.6 : 1;
-        ctx.drawImage(spr, px - SPR_W / 2, py - SPR_H + 1);
+        ctx.drawImage(spr, px - SPR_W / 2, py - SPR_H + 1 - bob);
         ctx.globalAlpha = 1;
       }
       // openness dot for receivers while the QB has the ball
@@ -931,7 +939,7 @@ class KickoffPlay extends Play {
     this.def.push(this.mk('def', 'KC', 'LB', 65, FIELD_W / 2 + 6, BASE_SPEED.LB * sf(dr), 11 + 2.5 * dr));
     this.kicker = this.mk('def', 'K', 'LB', 71, FIELD_W / 2 - 1, BASE_SPEED.S * sf(dr), 14);
     this.def.push(this.kicker);
-    for (const o of this.off) { o.setX = o.x; o.openField = true; }
+    for (const o of this.off) { o.setX = o.x; o.openField = true; o.accel *= 1.35; }
     for (const d of this.def) d.lane = d.y;
     this.ball = { x: 65, y: FIELD_W / 2, h: 0.3, holder: null, air: false };
     this.camX = 40;
