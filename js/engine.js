@@ -16,8 +16,18 @@ const CARRIER_LATERAL = 1.8;  // sideways speed boost for a runner you're steeri
 let RQ = 1;  // render sub-pixel quantum, set by the UI to its canvas scale
 // Throw shape follows the pull: short throws are flat, fast line drives;
 // long ones become high, softer lobs a receiver can run under.
-const throwPeak = d => 0.35 + 0.0045 * d * d;                    // apex height, yards
-const throwSpeed = (arm, d) => (19 + 3.2 * arm) * lerp(1.25, 0.85, clamp(d / 45, 0, 1));
+const throwPeak = d => 0.6 + 0.04 * d + 0.0038 * d * d;          // apex height, yards
+const throwSpeed = (arm, d) => (19 + 3.2 * arm) * lerp(1.12, 0.85, clamp(d / 45, 0, 1));
+// The ball reaches the aim spot at catch height (not the grass), then keeps
+// carrying a little further while it drops, so a late receiver can still get it.
+const BALL_CATCH_H = 1.2, BALL_CARRY_T = 0.4, BALL_CARRY_D = 2.4;   // seconds, yards past the spot
+const ballEnd = b => 1 + BALL_CARRY_T / b.dur;                     // flight progress when it hits the grass
+function ballAt(b, u) {
+  if (u <= 1) return { x: lerp(b.fx, b.tx, u), y: lerp(b.fy, b.ty, u), h: 1.8 * (1 - u) + 4 * b.peak * u * (1 - u) + BALL_CATCH_H * u };
+  const k = Math.min(1, (u - 1) * b.dur / BALL_CARRY_T), d = Math.hypot(b.tx - b.fx, b.ty - b.fy) || 1;
+  const s = BALL_CARRY_D * k * (1 - 0.3 * k) / d;
+  return { x: b.tx + (b.tx - b.fx) * s, y: b.ty + (b.ty - b.fy) * s, h: BALL_CATCH_H * (1 - k * k) };
+}
 const throwDur = (arm, d) => 0.18 + d / throwSpeed(arm, d);
 
 class Play {
@@ -391,20 +401,28 @@ class Play {
 
     // Ball in the air: intended receiver goes to the spot
     if (this.phase === 'air' && o.track) {
-      // time the run so the receiver meets the ball instead of waiting under it
-      const b = this.ball, rem = Math.max(0.05, b.t0 + b.dur - t);
-      const d = Math.hypot(b.tx - o.x, b.ty - o.y);
+      const b = this.ball, tCatch = b.t0 + b.dur, tGround = b.t0 + b.dur + BALL_CARRY_T;
       if (o.diving) { o.vx *= Math.pow(0.15, dt); o.vy *= Math.pow(0.15, dt); return; }
-      // just out of reach as it comes down: lay out for it
-      const shortBy = d - Math.hypot(o.vx, o.vy) * rem;  // how far he'll still be when it lands
-      if (rem < 0.32 && shortBy > 1.6 && d < 4.6) {
+      // the ball is coming down: lay out if he won't get there on his feet
+      const remG = Math.max(0.05, tGround - t);
+      const dBall = Math.hypot(b.x - o.x, b.y - o.y);
+      const shortBy = dBall - Math.hypot(o.vx, o.vy) * remG;
+      if (t > tCatch - 0.15 && b.h < 1.5 && shortBy > 1.2 && dBall > 1.6 && dBall < 4.6) {
         o.diving = true;
-        const s = Math.min(14, d / rem);
-        o.vx = (b.tx - o.x) / d * s; o.vy = (b.ty - o.y) / d * s;
+        const s = Math.min(14, dBall / Math.min(remG, 0.35));
+        o.vx = (b.x - o.x) / dBall * s; o.vy = (b.y - o.y) / dBall * s;
         return;
       }
-      const need = clamp(d / rem, 0, o.maxSp) / o.maxSp;
-      this.steer(o, b.tx, b.ty, dt, Math.max(need, d > 0.5 ? 0.35 : 0), 0.1);
+      if (t < tCatch) {
+        // time the run so he meets the ball at the aim spot instead of waiting under it
+        const rem = Math.max(0.05, tCatch - t), d = Math.hypot(b.tx - o.x, b.ty - o.y);
+        const need = clamp(d / rem, 0, o.maxSp) / o.maxSp;
+        this.steer(o, b.tx, b.ty, dt, Math.max(need, d > 0.5 ? 0.35 : 0), 0.1);
+      } else {
+        // it's past the spot and still carrying: chase it down
+        const g = ballAt(b, ballEnd(b));
+        this.steer(o, g.x, g.y, dt, 1, 0);
+      }
       return;
     }
 
@@ -616,18 +634,18 @@ class Play {
 
   updateBall(dt) {
     const b = this.ball, u = (this.t - b.t0) / b.dur;
-    const uu = Math.min(u, 1);
-    b.x = lerp(b.fx, b.tx, uu); b.y = lerp(b.fy, b.ty, uu);
-    b.h = 1.8 * (1 - uu) + 4 * b.peak * uu * (1 - uu);
+    const end = ballEnd(b);
+    const at = ballAt(b, Math.min(u, end));
+    b.x = at.x; b.y = at.y; b.h = at.h;
     (b.trail || (b.trail = [])).push({ x: b.x, y: b.y, h: b.h });
     if (b.trail.length > 7) b.trail.shift();
-    if (u < 0.72 || (u < 1 && b.h > 2.3)) return;
+    if (u < 0.72 || b.h > 2.3) return;
     // Receivers can reach a bit higher than a defender jumping into the lane.
-    const rR = u >= 1 ? 1.9 : 1.3, dR = u >= 1 ? 1.0 : (b.h < 1.2 ? 0.55 : 0);
+    const rR = u >= 0.95 ? 1.9 : 1.3, dR = u >= 1 ? 1.0 : (b.h < 1.2 ? 0.55 : 0);
     let r = null, rd = rR, dfd = null, ddd = dR;
     for (const e of this.receivers) { if (e.block && !e.track) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < rd) { rd = k; r = e; } }
     for (const e of this.def) { if (e.blockedBy) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < ddd) { ddd = k; dfd = e; } }
-    if (!r && !dfd && u >= 1) {
+    if (!r && !dfd && u >= end) {
       // just out of reach: the receiver lays out for it
       let dv = null, dvd = 4.4;
       for (const e of this.receivers) { if (e.block && !e.track) continue; const k = Math.hypot(e.x - b.x, e.y - b.y); if (k < dvd) { dvd = k; dv = e; } }
@@ -897,7 +915,7 @@ class Play {
     // the flight itself: bold dots with a dark edge so they read on the turf
     for (let i = 1; i < n; i++) {
       const u = i / n;
-      const x = lerp(q.x, tx, u), y = lerp(q.y, ty, u), h = 1.8 * (1 - u) + 4 * peak * u * (1 - u);
+      const x = lerp(q.x, tx, u), y = lerp(q.y, ty, u), h = 1.8 * (1 - u) + 4 * peak * u * (1 - u) + BALL_CATCH_H * u;
       const px = sx(x), py = sy(y) - h * POST_H;
       ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(px - 1, py - 0.5, 2.5, 2.5);
       ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, py - 1, 2, 2);
