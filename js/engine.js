@@ -14,6 +14,11 @@ const BASE_SPEED = { QB: 6.7, RB: 7.8, WR: 8.0, TE: 7.1, OL: 5.4, DL: 6.4, LB: 7
 const TACKLE_R = 1.0;
 const CARRIER_LATERAL = 1.8;  // sideways speed boost for a runner you're steering
 let RQ = 1;  // render sub-pixel quantum, set by the UI to its canvas scale
+// Throw shape follows the pull: short throws are flat, fast line drives;
+// long ones become high, softer lobs a receiver can run under.
+const throwPeak = d => 0.35 + 0.0045 * d * d;                    // apex height, yards
+const throwSpeed = (arm, d) => (19 + 3.2 * arm) * lerp(1.25, 0.85, clamp(d / 45, 0, 1));
+const throwDur = (arm, d) => 0.18 + d / throwSpeed(arm, d);
 
 class Play {
   // opts: { def: playbook entry, los, ballY, roster, units:{ol}, oppDef, offKit, defKit, goalLine }
@@ -195,13 +200,13 @@ class Play {
   // receiver will be when the ball arrives (two passes of lead prediction).
   assistAim(tx, ty) {
     const q = this.qb, P = this.roster.QB;
-    const speed = 19 + 3.2 * P.arm, maxD = 34 + 6 * P.arm;
+    const maxD = 34 + 6 * P.arm;
     // Light touch only: the ball goes where you aim (like Retro Bowl), nudged
     // a little toward a receiver's path when you're within a few yards of it.
     let best = null, bd = 4;
     for (const r of this.receivers) {
       if (r.block) continue;
-      const dur = 0.22 + Math.hypot(r.x - q.x, r.y - q.y) / speed;
+      const dur = throwDur(P.arm, Math.hypot(r.x - q.x, r.y - q.y));
       const dd = Math.hypot(r.x + r.vx * dur - tx, r.y + r.vy * dur - ty);
       if (dd < bd) { bd = dd; best = r; }
     }
@@ -209,7 +214,7 @@ class Play {
     if (best) {
       let lx = best.x, ly = best.y;
       for (let i = 0; i < 3; i++) {
-        const dur = 0.22 + Math.hypot(lx - q.x, ly - q.y) / speed;
+        const dur = throwDur(P.arm, Math.hypot(lx - q.x, ly - q.y));
         lx = best.x + best.vx * dur * 0.7; ly = best.y + best.vy * dur * 0.7;
       }
       ly = clamp(ly, 0.8, FIELD_W - 0.8);
@@ -237,9 +242,8 @@ class Play {
     // small scatter: better QBs, short throws and a clean pocket are tighter
     const sigma = 0.08 + d * (0.02 - 0.003 * P.acc) + pressure * 0.8;
     tx += gauss() * sigma; ty += gauss() * sigma * 0.7;
-    const speed = 19 + 3.2 * P.arm;
-    const dur = 0.22 + d / speed;
-    this.ball = { x: q.x, y: q.y, h: 1.8, fx: q.x, fy: q.y, tx, ty, t0: this.t, dur, peak: 0.8 + d * 0.13, holder: null, air: true };
+    const dur = throwDur(P.arm, d);
+    this.ball = { x: q.x, y: q.y, h: 1.8, fx: q.x, fy: q.y, tx, ty, t0: this.t, dur, peak: throwPeak(d), holder: null, air: true };
     q.hasBall = false;
     this.phase = 'air';
     this.throwDist = d;
@@ -877,7 +881,7 @@ class Play {
     const q = this.qb;
     const a = this.assistAim(this.aim.x, this.aim.y);
     const tx = a.x, ty = a.y;
-    const peak = 0.8 + Math.hypot(tx - q.x, ty - q.y) * 0.13;
+    const peak = throwPeak(Math.hypot(tx - q.x, ty - q.y));
     const n = Math.max(7, Math.round(Math.hypot(tx - q.x, ty - q.y) / 2.2));
     // the ball's shadow track along the ground
     ctx.fillStyle = 'rgba(0,0,0,0.35)';

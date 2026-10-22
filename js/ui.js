@@ -111,7 +111,9 @@ const UI = (() => {
     if (!p) return;
     const pt = toInternal(e);
     if (p.phase === 'presnap' && match.awaitSnap) {
-      match.awaitSnap = false; p.snap(); return;
+      match.awaitSnap = false; p.snap();
+      if (!p.canThrow()) return;  // run play: just the snap
+      // pass play: this same touch starts the pull-back, falling through to aim
     }
     if (p.canThrow()) {
       aiming = { id: e.pointerId, ax: pt.x, ay: pt.y, len: 0 };
@@ -257,9 +259,12 @@ const UI = (() => {
   }
 
   // The ball is snapped automatically a beat after the play call; a tap snaps it sooner.
+  // Run plays snap on their own a beat after the call. Pass plays wait for you:
+  // the ball is snapped the moment you touch to start pulling back.
   function presnap(m) {
     m.awaitSnap = true;
     const p = m.play;
+    if (p.playDef && p.playDef.type === 'pass') return;
     setTimeout(() => { if (match === m && m.awaitSnap && m.play === p && !paused) { m.awaitSnap = false; p.snap(); } }, 700);
   }
 
