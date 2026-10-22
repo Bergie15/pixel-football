@@ -353,11 +353,12 @@ class Match {
     let pts = 0;
     if (resultLabel === 'TD') pts = Math.random() < 0.95 ? 7 : 6;
     else if (resultLabel === 'FG') pts = 3;
-    const names = { TD: 'TOUCHDOWN', FG: 'FIELD GOAL', 'MISSED FG': 'MISSED FIELD GOAL', PUNT: 'PUNT', INTERCEPTION: 'INTERCEPTION!', FUMBLE: 'FUMBLE RECOVERED!', DOWNS: 'STOPPED ON DOWNS' };
-    const good = ['PUNT', 'INTERCEPTION', 'FUMBLE', 'MISSED FG', 'DOWNS'].includes(resultLabel);
+    const names = { TD: 'TOUCHDOWN', FG: 'FIELD GOAL', 'MISSED FG': 'MISSED FIELD GOAL', PUNT: 'PUNT', INTERCEPTION: 'INTERCEPTION!', FUMBLE: 'FUMBLE RECOVERED!', DOWNS: 'STOPPED ON DOWNS', SAFETY: 'SAFETY!' };
+    const good = ['PUNT', 'INTERCEPTION', 'FUMBLE', 'MISSED FG', 'DOWNS', 'SAFETY'].includes(resultLabel);
     const endX = clamp(100 - (startYd + res.yards), -5, 100);
     UI.driveAnim(100 - startYd, endX, () => {
     this.score.o += pts;
+    if (resultLabel === 'SAFETY') this.score.u += 2;
     UI.hudUpdate(this);
     UI.card({
       kicker: `${this.opp.mascot.toUpperCase()} BALL`,
@@ -366,7 +367,9 @@ class Match {
       lines: [
         `Took over at ${startYd < 50 ? 'their own ' + startYd : startYd === 50 ? 'midfield' : 'your ' + (100 - startYd)}`,
         `${res.plays} plays · ${res.yards} yds · ${fmtClock(Math.min(res.time, before))}`,
+        resultLabel === res.result ? defKeyLine(res) : '',
         pts === 6 ? 'Extra point blocked!' : '',
+        resultLabel === 'SAFETY' ? `${this.user.mascot} +2` : '',
       ],
       buttons: [{ label: 'CONTINUE', cls: 'go', fn: () => this.afterClock(() => (pts ? this.kickoffReturn() : this.beginDrive(res.userStart))) }],
     });
@@ -387,13 +390,14 @@ class Match {
     let pts = res.result === 'TD' ? 7 : res.result === 'FG' ? 3 : 0;
     if (pts === 7 && lead === 8) pts = Math.random() < 0.45 ? 8 : 6;
     this.score.o += pts;
+    if (res.result === 'SAFETY') this.score.u += 2;
     UI.hudUpdate(this);
-    const names = { TD: 'TOUCHDOWN', FG: 'FIELD GOAL', 'MISSED FG': 'MISSED FIELD GOAL', INTERCEPTION: 'INTERCEPTION!', FUMBLE: 'FUMBLE!', DOWNS: 'STOPPED ON DOWNS', PUNT: 'STOPPED' };
+    const names = { TD: 'TOUCHDOWN', FG: 'FIELD GOAL', 'MISSED FG': 'MISSED FIELD GOAL', INTERCEPTION: 'INTERCEPTION!', FUMBLE: 'FUMBLE!', DOWNS: 'STOPPED ON DOWNS', PUNT: 'STOPPED', SAFETY: 'SAFETY!' };
     UI.card({
       kicker: `${this.opp.mascot.toUpperCase()} BALL · OT`,
       title: names[res.result] || res.result,
       tone: pts ? 'bad' : 'good',
-      lines: [`${res.plays} plays · ${res.yards} yds`, this.scoreLine()],
+      lines: [`${res.plays} plays · ${res.yards} yds`, defKeyLine(res), this.scoreLine()],
       buttons: [{
         label: 'CONTINUE', cls: 'go', fn: () => {
           if (this.score.u !== this.score.o) return this.finish();

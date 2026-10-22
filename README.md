@@ -26,7 +26,7 @@ npx serve .          # or: python3 -m http.server
 - **Kick.** Tap when the needle is in the green, then watch it fly at the uprights.
 - **Difficulty.** Easy, Normal or Hard in Settings. This changes how good opposing defenses and offenses are.
 
-You play offense. Each opponent drive is simulated from your defense rating against their offense, and the result shows on a scorecard.
+You play offense. Opponent drives are simulated one snap at a time, like Retro Bowl. Each snap picks your D-line, linebackers or secondary and rolls your defense rating against their offense, with difficulty raising their side. A big win for your defense is a takeaway, a smaller win is a stop, sack or incompletion, and a loss is a gain for them. The drive plays out through downs, with punts, field goals and 4th-down tries, and the scorecard shows the result and the play your defense made.
 
 Keyboard works too: Space snaps the ball or jukes, the arrow keys steer the runner, and the mouse throws.
 

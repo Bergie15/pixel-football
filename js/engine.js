@@ -1058,39 +1058,86 @@ class KickoffPlay extends Play {
 // Opponent possession simulation.
 // startYd: yards from the opponent's own goal line.
 // ---------------------------------------------------------------------------
+// Opponent drives are simulated snap by snap, Retro Bowl style: each play
+// picks one of your defensive groups, rolls it against their offense, and the
+// margin decides between a takeaway, a stop and a gain.
+const DEF_GROUPS = { DL: 'line', LB: 'linebackers', DB: 'secondary' };
+function simDefSnap(off, def, pass) {
+  const roll = rnd();
+  const group = pass ? (roll < 0.3 ? 'DL' : roll < 0.5 ? 'LB' : 'DB') : (roll < 0.45 ? 'DL' : roll < 0.85 ? 'LB' : 'DB');
+  const m = 0.11 * (def - off) + gauss() * 0.95 - 0.15;   // > 0: the defense wins the snap
+  if (m > 1.75) {
+    if (pass && group !== 'DL') return { group, kind: 'INTERCEPTION', yards: 0 };
+    if (rnd() < 0.5) return { group, kind: 'FUMBLE', yards: pass ? -6 : 1 };
+  }
+  if (m > 0) {
+    if (pass) return group === 'DL' && rnd() < 0.55 ? { group, kind: 'sack', yards: -Math.round(4 + rnd() * 5) } : { group, kind: 'inc', yards: 0 };
+    return { group, kind: 'stuff', yards: Math.round(-2 + rnd() * 4) };
+  }
+  const big = rnd() < (pass ? 0.07 : 0.035) + 0.04 * clamp(-m - 1, 0, 2);
+  const yards = pass ? 6 + -m * 6 + rnd() * 6 + (big ? 15 + rnd() * 30 : 0) : 2 + -m * 3.5 + rnd() * 3 + (big ? 12 + rnd() * 30 : 0);
+  return { group, kind: pass ? 'catch' : 'run', yards: Math.round(yards) };
+}
+
 function simOppDrive(opp, userDef, startYd, ctx) {
-  const diff = opp.off - userDef;
-  const field = (startYd - 25) / 100;
-  let pTD = clamp(0.3 + 0.075 * diff + 0.7 * field, 0.05, 0.85);
-  let pFG = clamp(0.17 + 0.25 * field, 0.05, 0.32);
-  let pTO = clamp(0.12 - 0.025 * diff, 0.04, 0.24);
-  if (ctx.ot) { pTD = clamp(pTD + 0.08, 0.2, 0.7); pFG = 0.3; pTO = 0.12; }
-  const r = rnd();
-  let result;
-  if (r < pTD) result = 'TD';
-  else if (r < pTD + pFG) result = rnd() < 0.82 ? 'FG' : 'MISSED FG';
-  else if (r < pTD + pFG + pTO) result = rnd() < 0.6 ? 'INTERCEPTION' : 'FUMBLE';
-  else result = ctx.ot ? 'DOWNS' : 'PUNT';
-  // In overtime the opponent plays to the situation
-  if (ctx.ot && ctx.need === 'TD' && result === 'FG') result = rnd() < 0.45 ? 'TD' : 'DOWNS';
-  if (ctx.ot && ctx.need === 'FG' && (result === 'PUNT' || result === 'DOWNS') && rnd() < 0.35) result = 'FG';
+  const scale = ctx.scale || 1;
+  let yd = startYd, down = 1, togo = 10, plays = 0, time = 0, result = null, key = null;
+  const ownGoal = y => 100 - y;   // yards to the end zone
+  const fgMake = y => clamp(1.02 - 0.012 * Math.max(0, ownGoal(y) + 17 - 20), 0.15, 0.97);
+  while (!result && plays < 18) {
+    // 4th down: kick, punt or go for it
+    if (down === 4) {
+      const fgDist = ownGoal(yd) + 17;
+      const needTD = ctx.ot && ctx.need === 'TD';
+      if (!needTD && fgDist <= 52 && !(togo <= 2 && ownGoal(yd) <= 5)) {
+        plays++; time += 6;
+        result = rnd() < fgMake(yd) ? 'FG' : 'MISSED FG';
+        break;
+      }
+      const goForIt = ctx.ot || ctx.clutch === 'hurry' || (togo <= 2 && yd >= 45) || (togo <= 1 && yd >= 35);
+      if (!goForIt) { plays++; time += 8; result = 'PUNT'; break; }
+    }
+    const pass = rnd() < (togo >= 7 ? 0.68 : togo <= 2 ? 0.3 : 0.52) + (ctx.clutch === 'hurry' ? 0.2 : 0);
+    const s = simDefSnap(opp.off, userDef, pass);
+    plays++;
+    time += s.kind === 'inc' ? 8 : ctx.clutch === 'hurry' ? 18 : 38 + rnd() * 10;
+    if (s.kind === 'INTERCEPTION' || s.kind === 'FUMBLE') {
+      yd = clamp(yd + s.yards, 1, 99); result = s.kind; key = s; break;
+    }
+    if (s.kind === 'sack' || (down >= 3 && s.yards < togo)) { key = s; s.down = down; }
+    yd += s.yards;
+    if (yd >= 100) { result = 'TD'; yd = 100; break; }
+    if (yd <= 0) { result = 'SAFETY'; yd = 0; break; }
+    togo -= s.yards;
+    if (togo <= 0) { down = 1; togo = Math.min(10, ownGoal(yd)); }
+    else if (++down > 4) { result = 'DOWNS'; break; }
+  }
+  if (!result) result = 'PUNT';
+  if (result === 'PUNT' && ctx.ot) result = 'DOWNS';
 
-  let yards;
-  if (result === 'TD') yards = 100 - startYd;
-  else if (result === 'FG' || result === 'MISSED FG') yards = Math.round(clamp(100 - startYd - 8 - rnd() * 25, 0, 100 - startYd - 3));
-  else yards = Math.round(clamp(gauss() * 10 + 22, -5, 100 - startYd - 15));
-  const end = startYd + yards;
-  const plays = Math.max(3, Math.round(Math.abs(yards) / 6 + rnd() * 4));
-  let time = Math.round(plays * (24 + rnd() * 10) * (ctx.scale || 1));
-  // Clock management late in a half
+  time = Math.round(time * scale);
   if (ctx.clutch === 'protect') time = Math.round(time * 1.35);
-  if (ctx.clutch === 'hurry') time = Math.round(time * 0.45);
-
+  const yards = yd - startYd;
   let userStart;
   if (result === 'TD' || result === 'FG') userStart = 25;
-  else if (result === 'PUNT') userStart = clamp(Math.round(100 - end - 38 - gauss() * 6), 6, 40);
-  else if (result === 'MISSED FG') userStart = clamp(100 - end, 20, 99);
-  else userStart = clamp(100 - end, 1, 99);
+  else if (result === 'SAFETY') userStart = 40;   // free kick after the safety
+  else if (result === 'PUNT') userStart = clamp(Math.round(100 - yd - 38 - gauss() * 6), 6, 40);
+  else if (result === 'MISSED FG') userStart = clamp(100 - yd - 7, 20, 99);
+  else userStart = clamp(100 - yd, 1, 99);
   if (userStart > 80 && result === 'PUNT') userStart = 20;
-  return { result, plays, yards, time, userStart, startYd };
+  return { result, plays, yards, time, userStart, startYd, key };
+}
+
+// One line for the drive card naming the group that made the key play.
+function defKeyLine(res) {
+  const k = res.key;
+  if (!k || res.result === 'TD') return '';
+  const g = { DL: 'D-line', LB: 'Linebackers', DB: 'Secondary' }[k.group];
+  if (k.kind === 'INTERCEPTION') return k.group === 'LB' ? 'Linebacker picked it off' : 'Secondary picked it off';
+  if (k.kind === 'FUMBLE') return `${g} forced a fumble`;
+  if (k.kind === 'sack') return `${g} sack for -${-k.yards} yds`;
+  const dn = k.down === 4 ? '4th' : '3rd';
+  if (k.kind === 'stuff') return `${g} stuffed ${dn} down`;
+  if (k.kind === 'inc') return `${g} broke up ${dn} down`;
+  return `${g} held on ${dn} down`;
 }
