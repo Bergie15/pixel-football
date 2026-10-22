@@ -186,6 +186,13 @@ function getSprite(kit, skin, pose, facing) {
   return c;
 }
 
+// Conference abbreviation painted on the field (internal codes → what's printed)
+const CONF_FIELD_LABEL = { MACC: 'MAC', USAS: 'USA S' };
+function confLabel(team) {
+  const c = team.d3conf || team.conf || team.id;
+  return CONF_FIELD_LABEL[c] || c;
+}
+
 // ---- Stadium + field strip ----------------------------------------------------
 // Pre-rendered once per game: crowd, sideline, turf, lines, numbers, end zones.
 function buildFieldStrip(home, away) {
@@ -276,8 +283,8 @@ function buildFieldStrip(home, away) {
     }
   }
 
-  // Home logo letters at the 25s, far side upside down like the real thing
-  const logo = textCanvas(home.id, 3, home.c1, '#f4f4f4');
+  // The home team's conference at the 25s, far side upside down like the real thing
+  const logo = textCanvas(confLabel(home), 3, home.c1, '#f4f4f4');
   for (const x of [25, 75]) {
     blitRot(g, logo, fx(x), fy(4.5), 2);
     blitRot(g, logo, fx(x), fy(FIELD_W - 4.5), 0);

@@ -288,7 +288,7 @@ const National = (() => {
   }
 
   // ---- games -------------------------------------------------------------------
-  const teamData = id => Object.assign({}, T(id), { off: N.teams[id].off, def: N.teams[id].def });
+  const teamData = id => Object.assign({}, T(id), { off: N.teams[id].off, def: N.teams[id].def, d3conf: confOf(id) });
 
   function play() {
     const g = myGame(), home = g.h === N.userId;
