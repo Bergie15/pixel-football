@@ -196,7 +196,9 @@ class Play {
   assistAim(tx, ty) {
     const q = this.qb, P = this.roster.QB;
     const speed = 19 + 3.2 * P.arm, maxD = 34 + 6 * P.arm;
-    let best = null, bd = 6.5;
+    // Light touch only: the ball goes where you aim (like Retro Bowl), nudged
+    // a little toward a receiver's path when you're within a few yards of it.
+    let best = null, bd = 4;
     for (const r of this.receivers) {
       if (r.block) continue;
       const dur = 0.22 + Math.hypot(r.x - q.x, r.y - q.y) / speed;
@@ -211,7 +213,7 @@ class Play {
         lx = best.x + best.vx * dur * 0.7; ly = best.y + best.vy * dur * 0.7;
       }
       ly = clamp(ly, 0.8, FIELD_W - 0.8);
-      const pull = clamp(1 - bd / 6.5, 0, 1) * 0.35 + 0.65;  // strong snap, still nudgeable
+      const pull = clamp(1 - bd / 4, 0, 1) * 0.4;
       x = lerp(tx, lx, pull); y = lerp(ty, ly, pull);
     }
     const d = Math.hypot(x - q.x, y - q.y);
@@ -608,6 +610,8 @@ class Play {
     const uu = Math.min(u, 1);
     b.x = lerp(b.fx, b.tx, uu); b.y = lerp(b.fy, b.ty, uu);
     b.h = 1.8 * (1 - uu) + 4 * b.peak * uu * (1 - uu);
+    (b.trail || (b.trail = [])).push({ x: b.x, y: b.y, h: b.h });
+    if (b.trail.length > 7) b.trail.shift();
     if (u < 0.72 || (u < 1 && b.h > 2.3)) return;
     // Receivers can reach a bit higher than a defender jumping into the lane.
     const rR = u >= 1 ? 1.9 : 1.3, dR = u >= 1 ? 1.0 : (b.h < 1.2 ? 0.55 : 0);
@@ -640,6 +644,7 @@ class Play {
         this.catcher = r;
         this.makeRunner(r);
         this.events.push('catch');
+        this.pop = { text: 'CAUGHT!', e: r, t0: this.t };
         if (r.x >= 100) this.endPlay('td', 'TOUCHDOWN!');
         return;
       }
@@ -663,6 +668,7 @@ class Play {
     this.catcher = r;
     this.carrier = r; r.hasBall = true; b.air = false; b.holder = r;
     this.events.push('catch');
+    this.pop = { text: 'DIVING CATCH!', e: r, t0: this.t };
     if (r.x >= 100) return this.endPlay('td', 'TOUCHDOWN!');
     this.endPlay('tackle', 'DIVING CATCH!', clamp(r.x, 0.5, 99.5));
   }
@@ -767,7 +773,7 @@ class Play {
     for (const e of list) {
       const px = sx(e.x), py = sy(e.y);
       if (px < -12 || px > W + 12) continue;
-      if (e === target) this.ring(ctx, px, py, '#ffffff');
+      if (e === target || (e === this.qb && this.aim && this.canThrow())) this.ring(ctx, px, py, '#ffffff');
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.fillRect(px - 5, py, 11, 2);
       const kit = e.side === 'off' ? this.offKit : this.defKit;
@@ -798,8 +804,14 @@ class Play {
       }
     }
 
-    // ball
+    // ball (with a short streak while it's in the air)
     const b = this.ball;
+    if (b && b.air && b.trail) {
+      b.trail.forEach((p, i) => {
+        ctx.fillStyle = `rgba(255,255,255,${0.08 + i * 0.05})`;
+        ctx.fillRect(sx(p.x) - 0.5, sy(p.y) - p.h * POST_H - 0.5, 1, 1);
+      });
+    }
     if (b) {
       let bx = sx(b.x), by = sy(b.y);
       if (b.holder) { bx += (b.holder.vx < -0.8 ? -4 : 4); by -= 9; }
@@ -811,6 +823,16 @@ class Play {
         ctx.fillStyle = '#7a3b12'; ctx.fillRect(bx - 1.5, by - 1, 3, 2);
         ctx.fillStyle = '#f2e6d0'; ctx.fillRect(bx - 0.5, by - 1, 1, 0.5);
       }
+    }
+    // "Caught!" floats up over the receiver
+    if (this.pop && this.t - this.pop.t0 < 1.3) {
+      const k = this.t - this.pop.t0, e = this.pop.e;
+      const w = textWidth(this.pop.text, 1);
+      const tx = Math.round(sx(e.x) - w / 2), ty = Math.round(sy(e.y) - SPR_H - 9 - k * 6);
+      ctx.globalAlpha = k > 0.9 ? (1.3 - k) / 0.4 : 1;
+      drawText(ctx, this.pop.text, tx + 1, ty + 1, 1, '#0b0b0b');
+      drawText(ctx, this.pop.text, tx, ty, 1, '#ffffff');
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -856,18 +878,23 @@ class Play {
     const a = this.assistAim(this.aim.x, this.aim.y);
     const tx = a.x, ty = a.y;
     const peak = 0.8 + Math.hypot(tx - q.x, ty - q.y) * 0.13;
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    for (let i = 1; i < 20; i++) {
-      const u = i / 20;
+    const n = Math.max(7, Math.round(Math.hypot(tx - q.x, ty - q.y) / 2.2));
+    // the ball's shadow track along the ground
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    for (let i = 1; i < n; i++) { const u = i / n; ctx.fillRect(sx(lerp(q.x, tx, u)) - 0.75, sy(lerp(q.y, ty, u)) - 0.5, 1.5, 1); }
+    // the flight itself: bold dots with a dark edge so they read on the turf
+    for (let i = 1; i < n; i++) {
+      const u = i / n;
       const x = lerp(q.x, tx, u), y = lerp(q.y, ty, u), h = 1.8 * (1 - u) + 4 * peak * u * (1 - u);
-      ctx.fillRect(sx(x) - 0.5, sy(y) - h * POST_H - 0.5, 1, 1);
+      const px = sx(x), py = sy(y) - h * POST_H;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(px - 1, py - 0.5, 2.5, 2.5);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, py - 1, 2, 2);
     }
     // landing spot
     const cx = sx(tx), cy = sy(ty);
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.fillRect(cx - 2, cy - 1, 4, 2); ctx.fillRect(cx - 1, cy - 1.5, 2, 3);
-    // the receiver the throw is locked onto gets a ring
-    return a.r;
+    return null;
   }
 }
 

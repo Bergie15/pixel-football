@@ -378,6 +378,11 @@ const UI = (() => {
           match.onPlayEnd(p.result);
         }
         p.draw(ctx, W, match.strip, match.mode === 'two' ? null : match.fd);
+        if (aiming && settings.aim === 'pull' && p.canThrow()) {
+          // where your thumb went down, like Retro Bowl's touch marker
+          ctx.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx.beginPath(); ctx.arc(aiming.ax, aiming.ay, 4, 0, Math.PI * 2); ctx.fill();
+        }
       } else if (dv) {
         // opponent drive: the ball marches toward the user's end zone
         dv.t += dt;
